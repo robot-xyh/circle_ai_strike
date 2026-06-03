@@ -1,0 +1,15 @@
+[Unit]
+Description=Circle Pilot Betaflight debug daemon
+After=bf_flight.service network.target
+Wants=bf_flight.service
+
+[Service]
+Type=simple
+WorkingDirectory=@@PREFIX@@
+Environment=LD_LIBRARY_PATH=/usr/local/lib
+ExecStart=@@PREFIX@@/bin/bf_debugd -c @@PREFIX@@/config/strike_bf_debug.yaml
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=@@WANTED_BY@@

@@ -1,0 +1,31 @@
+bf_debug:
+  http_port: 8080
+  # log_level: debug/info/warn/error/off. log_color: auto/always/never.
+  log_level: debug
+  log_color: auto
+  preview_shm: /circle_pilot_debug_preview
+  plots_html: adapters/common/debug/web/plots.html
+  # tune_mode 选择 bf_debugd 的调参/保存 schema：
+  #   target_strike     -> StrikeParams（bf_flight）
+  #   target_strike_png -> StrikePngNodeParams（bf_flight_png，本配置）
+  tune_mode: target_strike_png
+  strike_flight_config: config/strike_png_bf_flight.yaml
+  mjpeg_quality: 70
+  video_transport: h264_webrtc
+  webrtc_encoder: auto
+  webrtc_bitrate_kbps: 1200
+  webrtc_bitrate_scale_with_fps: true
+  webrtc_fps: 30
+  encode_when_client_open: true
+  image_save:
+    enabled: true
+    dir: logs_ws/debug_frames   # 输出 raw/ 与 annotated/ 子目录
+    jpeg_quality: 85
+    max_files: 2000
+    save_annotated: true
+    save_raw: true
+    interval_s: 0.5
+    on_interval: true
+    on_detection: true
+    on_override: true
+    on_raw0: false

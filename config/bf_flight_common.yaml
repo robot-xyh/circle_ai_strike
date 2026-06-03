@@ -1,0 +1,103 @@
+# Shared Betaflight 运行时配置（宿主层）：MSP / 相机 / 感知 / 看门狗 / 油门交接 /
+# RC 映射。与具体控制器（strike / strike_png）无关，由各模式的 flight 配置通过
+#   bf_flight_config: config/bf_flight_common.yaml
+# 引用复用，避免每个控制器重复一份 bf_flight: 块。各模式可再写一个内联 `bf_flight:`
+# map 覆盖个别字段（如 log_level）。
+bf_flight:
+  # log_level: debug/info/warn/error/off. log_color: auto/always/never.
+  log_level: info                   # 日志级别（各模式可覆盖）
+  log_color: auto                   # 日志着色模式
+  msp:
+    device: /dev/ttyS1              # 飞控 MSP 串口设备
+    baud: 115200                    # MSP 串口波特率
+    # dry_run + MSP OVERRIDE bench: echo physical sticks (MSP_RC → SET_RAW_RC).
+    passthrough_in_dry_run: true    # dry_run 时把物理杆量回写（台架直通）
+    passthrough_log: true             # 是否打印直通通道日志
+    passthrough_log_interval_s: 1.0   # 直通日志打印间隔（s）
+    passthrough_throttle_jump_pwm: 40 # 油门跳变告警阈值（PWM）
+    # MSP SET_RAW_RC + vehicle poll (Hz). BF UART ~50Hz typical; 0 = use default below.
+    passthrough_hz: 50                # dry_run 时 RC 直通 SET_RAW_RC 速率（Hz）
+    live_publish_hz: 100               # dry_run=false 时 SET_RAW_RC 发送速率(Hz)=单串口IO线程周期
+    # 方案B MSP 预算分配：单 IO 线程每拍先发 SET（最高优先级），查询按分频交替。
+    attitude_poll_divisor: 1          # ATTITUDE 分频：IO率/该值 ≈ ATT 请求率（=1 即每拍请求）
+    status_poll_divisor: 5            # STATUS 分频：IO率/该值 ≈ STATUS 请求率（80/5≈16Hz）
+    override_grace_hold_s: 0.35       # OVERRIDE raw OFF 后继续发 latched MSP 的保持时间（s）
+    override_mode_flag_auto: true     # 是否自动检测 MSP OVERRIDE 的 mode_flag bit
+    override_mode_flag: 0x8000000     # auto 检测失败时的回退 mode_flag
+    override_channels_mask: 15        # OVERRIDE 接管的通道掩码（须与 BF CLI 一致）
+    passthrough_channel_count: 16     # SET_RAW_RC 发送的通道数
+  # camera: config/camera_bf_dexcin_009_lowres.yaml          # 相机配置文件
+  camera: config/camera_bf_mono_011_lowres.yaml
+  # camera_info: circle_pilot_bringup/config/decxin_009_top_6mm_640x512.yaml  # 相机内参文件
+  camera_info: circle_pilot_bringup/config/mono_a1_011_top_6mm_640x512.yaml  # 相机内参文件
+  max_infer_fps: 0                  # 推理帧率上限（0=不限）
+  zero_copy_pipeline_enabled: true # 是否启用零拷贝流水线
+  zero_copy_slot_count: 3           # 零拷贝槽位数
+  infer_worker_count: 3             # 推理线程/worker 数
+  # RK3588: 1=core0, 2=core1, 4=core2 — one NPU core per slot for parallel infer.
+  rknn_core_masks: [1, 2, 4]        # 各 worker 绑定的 NPU 核掩码
+  preview_shm_enabled: true         # 是否启用预览共享内存
+  preview_max_fps: 15               # 预览最大帧率
+  conf_threshold: 0.20              # YOLO NMS 前置置信阈值
+  iou_threshold: 0.45               # NMS 的 IoU 阈值
+  max_det: 300                      # 单帧最大检测数
+  model_path: circle_pilot_object_tracking/models/drone_v8n_v21_kd_relu_lambda008_640_640_rknn_model/drone_v8n_v21_kd_relu_lambda008_640_640-rk3588.rknn  # RKNN 模型路径
+  detection_file: ""                # 离线检测回放文件（空=用实时相机）
+  detection_coast_s: 0.40           # 漏检滑行窗口（s，复用上帧检测）
+  engage_require_fresh_detection: true   # 接管后是否要求先看到一帧新检测才发指令
+  engage_detection_fresh_timeout_s: 0.30 # 「新检测」的新鲜度超时（s）
+  watchdog_enabled: true            # 是否启用看门狗
+  watchdog_state_timeout_s: 0.5     # MSP 状态停滞超时（s），超则封锁算法指令
+  watchdog_overrun_warn_s: 0.25     # 控制循环单次超时告警阈值（s）
+  throttle_handover_s: 0.4          # 算法↔物理油门交接的线性过渡时长（s）
+  # 控制环频率(Hz)：与 msp.live_publish_hz(串口发送率) 独立。控制环按此频率计算/
+  # 暂存指令并发布遥测；MSP IO 线程按 live_publish_hz 把最新指令发往飞控。
+  # 取值范围 [20,500]，默认 200。设得过低会增大遥测阶梯并钝化制导。
+  control_loop_hz: 200
+  rc:                               # RC/MSP 通道与杆量映射
+    rc_min: 1000                    # 杆量 PWM 下限（归一化基准）
+    rc_mid: 1500                    # 杆量 PWM 中位
+    rc_max: 2000                    # 杆量 PWM 上限（归一化基准）
+    roll_channel: 0                 # roll 所在 MSP 通道（0-based）
+    pitch_channel: 1                # pitch 所在 MSP 通道
+    yaw_channel: 2                  # yaw 所在 MSP 通道
+    throttle_channel: 3             # 油门所在 MSP 通道
+    aux_arm_channel: 4              # 解锁(arm) AUX 所在 MSP 通道
+    #
+    # --- 方案 A（当前启用）：BF 线性 Rates ---
+    # BF 地面站：Rates Type=Betaflight，RC Rate=1.5，Rate(Super)=0.00，RC Expo=0.00
+    # → 满杆 = 200×RC Rate = 300 deg/s，整条曲线线性。
+    # yaml 的 max_*_rate 填满杆速率（与 BF 一致），上位机 rate→PWM 映射 1:1。
+    # max_roll_rate_rad_s: 5.236      # 300 deg/s
+    # max_pitch_rate_rad_s: 5.236     # 300 deg/s
+    # max_yaw_rate_rad_s: 5.236       # 300 deg/s（PNG 未用 yaw，但与 BF 保持一致）
+    #
+    # --- 方案 B（注释备选）：BF 非线性 Rates，RC Rate=1.50，Super=0.70，满杆 1000 deg/s ---
+    # BF 地面站：Rates Type=Betaflight，RC Rate=1.50，Rate(Super)=0.70，RC Expo=0.00
+    #   中位斜率 = 200×RC Rate = 300 deg/s（5.236 rad/s）
+    #   满杆     = 200×RC Rate / (1−Super) = 1000 deg/s（17.453 rad/s）
+    # 上位机映射是线性的，无法同时拟合中位与满杆；视觉跟踪工作在小杆量区，应对齐中位斜率：
+    # max_roll_rate_rad_s: 5.236      # 对齐中位 300 deg/s（推荐）
+    # max_pitch_rate_rad_s: 5.236
+    # max_yaw_rate_rad_s: 5.236
+    # 若对齐满杆 1000 deg/s（不推荐，小信号严重欠发）：
+    # max_roll_rate_rad_s: 17.453
+    # max_pitch_rate_rad_s: 17.453
+    # max_yaw_rate_rad_s: 17.453
+    # 非线性下算法满输出 2.0 rad/s 时实际约 2.7 rad/s（Super 放大 ~1.36×），首飞宜减小
+    # strike_png.max_*_rate_rad_s 或降低 nav_ratio 做补偿。
+    #
+    # --- 方案 C（注释备选）：BF 非线性 Rates，RC Rate=1.00，Super=0.70，满杆 667 deg/s ---
+    # BF 地面站：Rates Type=Betaflight，RC Rate=1.00，Rate(Super)=0.70，RC Expo=0.00
+    #   中位斜率 = 200×RC Rate = 200 deg/s（3.491 rad/s）
+    #   满杆     = 200×RC Rate / (1−Super) = 667 deg/s（11.641 rad/s）
+    # 应对齐中位斜率（视觉小杆量区）：
+    max_roll_rate_rad_s: 3.491      # 对齐中位 200 deg/s（推荐）
+    max_pitch_rate_rad_s: 3.491
+    max_yaw_rate_rad_s: 3.491
+    # 若对齐满杆 667 deg/s（不推荐）：
+    # max_roll_rate_rad_s: 11.641
+    # max_pitch_rate_rad_s: 11.641
+    # max_yaw_rate_rad_s: 11.641
+    # 非线性下算法满输出 2.0 rad/s（114 deg/s）→ 杆量 57% → 实际约 191 deg/s（3.34 rad/s，~1.67×）。
+    # 首飞建议 strike_png.max_*_rate_rad_s: 1.2（实际 ~1.6 rad/s）或降低 nav_ratio。

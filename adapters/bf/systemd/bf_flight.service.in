@@ -1,0 +1,15 @@
+[Unit]
+Description=Circle Pilot Betaflight flight stack
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=@@PREFIX@@
+Environment=LD_LIBRARY_PATH=/usr/local/lib
+ExecStart=@@PREFIX@@/bin/bf_flight -c @@PREFIX@@/config/strike_bf_flight.yaml
+Restart=on-failure
+RestartSec=2
+@@PRIORITY_DIRECTIVES@@
+[Install]
+WantedBy=@@WANTED_BY@@

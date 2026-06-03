@@ -1,0 +1,35 @@
+bf_debug:
+  http_port: 8080
+  # log_level: debug/info/warn/error/off. log_color: auto/always/never.
+  log_level: debug
+  log_color: auto
+  preview_shm: /circle_pilot_debug_preview
+  plots_html: adapters/common/debug/web/plots.html
+  strike_flight_config: config/strike_bf_flight.yaml
+  # mjpeg: browser uses /api/video/mjpeg (default, lowest latency to enable)
+  # h264_webrtc: Wi-Fi needs fps-scaled CBR (see tracking_debug_node). At 15 fps,
+  # nominal 1200 → 600 kbps effective — enough for 640x512 overlay without the
+  # RTP bursts that 1800 kbps (no scale) causes (~17% UDP loss on 192.168.100.x).
+  # video_transport: mjpeg
+  mjpeg_quality: 70
+  video_transport: h264_webrtc
+  webrtc_encoder: auto
+  webrtc_bitrate_kbps: 1200
+  webrtc_bitrate_scale_with_fps: true
+  webrtc_fps: 30
+  encode_when_client_open: true
+  # Browser must use board WiFi IP (e.g. http://192.168.100.198:8080/), not 192.168.12.1
+  image_save:
+    # bf_flight 写 preview SHM（原图 + overlay 元数据）；bf_debugd 落盘。
+    enabled: true
+    dir: logs_ws/debug_frames   # 输出 raw/ 与 annotated/ 子目录
+    jpeg_quality: 85                        # 1-100
+    max_files: 2000                         # 环形上限（raw/annotated 各自独立计数）
+    save_annotated: true                    # 带标注帧（bf_debugd 绘制 overlay 后）
+    save_raw: true                          # 原图（overlay 绘制前，来自 preview SHM 像素）
+    # 所有触发 OR 组合，且受 interval_s 限速(任意两次存图最小间隔)。
+    interval_s: 0.5                         # 限速间隔，也是 on_interval 周期
+    on_interval: true                      # 周期触发
+    on_detection: true                     # telemetry.detection_valid
+    on_override: true                      # telemetry.msp_override_active
+    on_raw0: false                          # 无有效检测(raw=0)

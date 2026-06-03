@@ -1,0 +1,130 @@
+# Profile C (PNG): Betaflight flight process config for bf_flight_png — 中速档.
+# 控制逻辑与 PX4 circle_pilot_target_strike_png 节点保持一致（比例导引 PNG）。
+# 复用 bf_flight 的接管/油门/安全机制（MSP OVERRIDE、油门交接、看门狗）。
+# Bf body frame: FLU (forward, left, up); PX4 body frame: FRD (forward, right, down).
+# -----------------------------------------------------------------------------
+# 注意：bf_flight 与 bf_flight_png 共享串口/SHM，运行时互斥（不可同时启动）。
+# 复用共享 BF 运行时配置（MSP/相机/感知/看门狗/油门交接/RC 映射）。
+# 如需个别覆盖，可在文件内再写一个内联 `bf_flight:` map（仅写需要改的字段）。
+# 仿真对照：circle_pilot_target_strike_png/config/gz_target_strike_png_top_cam_mid_speed.yaml
+# 设计：low / high 之间折中；末端 fov_trim 淡出开启
+# 启动：launch_bf.sh --png --flight-config config/strike_png_bf_flight_mid_speed.yaml
+bf_flight_config: config/bf_flight_common.yaml
+
+strike_png:
+  # --- 节点级门控 / 安全 ---
+  dry_run: false                        # 干跑：true 时不写实际角速度/推力（台架安全）
+  require_armed_to_command: true        # 未解锁(armed)前禁止发非零 rate/thrust（L1 安全）
+  target_class_name: UAV                # 跟踪目标类别名（YOLO 标签）
+  min_score: 0.25                      # 检测被接受的最低置信度（用于视觉 filter）
+  detection_stale_s: 0.35               # 检测时间戳超过此秒数即判过期（detection_valid=false）
+  # --- 油门策略（BF 归一化杆位分数 [0,1]：0→1000PWM,0.5→1500,1.0→2000）---
+  # ⚠ 首飞前需台架核实：取决于实际悬停档位（参考 strike_bf_flight hover_scalar=0.283）。
+  hover_thrust_z: 0.283                 # 无目标时悬停油门档（0~1）
+  strike_thrust_z: 0.50                 # 有目标时打击油门档（0~1，中速档对齐仿真 0.76 意图）
+  # --- 目标丢失保持（PX4 target_lost_hold 等价；BF 触发后释放为物理保持）---
+  target_lost_hold_enable: true         # 是否启用目标丢失保持→释放
+  target_lost_hold_delay_s: 0.05        # 丢失多久后释放为物理保持（s）
+  # --- 入场过渡（接管瞬间从当前姿态/初始油门平滑过渡到算法指令）---
+  entry_smooth_enable: true             # 是否启用入场平滑
+  entry_smooth_duration_s: 0.80         # 入场平滑时长（s）
+  entry_smooth_initial_thrust_z: 0.283  # 入场起始油门档（0~1，建议≈hover）
+  # --- StrikePngController（比例导引）---
+  enable: true                          # PNG 控制器总开关
+  #
+  # 算法输出 clamp（须 ≤ bf_flight.rc.max_*_rate 满杆标定值）。
+  # 方案 A（BF 线性 300 deg/s 满杆，rc.max=5.236）：2.0 rad/s ≈ 114 deg/s ≈ 38% 杆，1:1。
+  # max_roll_rate_rad_s: 2.0
+  # max_pitch_rate_rad_s: 2.0
+  # 方案 B（BF 非线性 Super=0.70 满杆 1000 deg/s，rc.max=5.236 对齐中位 300 deg/s）：
+  # 2.0 rad/s 指令实际约 2.7 rad/s（Super 放大）；首飞可改小：
+  # max_roll_rate_rad_s: 1.5           # ≈ 86 deg/s，实际 ~117 deg/s
+  # max_pitch_rate_rad_s: 1.5
+  # 方案 C（BF 非线性 RC Rate=1.00 Super=0.70 满杆 667 deg/s，rc.max=3.491 对齐中位 200 deg/s）：
+  # 本档对齐仿真 mid_speed：1.35 / 1.2 rad/s（非线性下实际角速度仍会被 Super 放大）。
+  max_roll_rate_rad_s: 1.35
+  max_pitch_rate_rad_s: 1.2
+  pixel_dot_lpf_tau_s: 0.08          # 像素误差微分 LPF 时间常数（s）
+  nav_ratio_x: 3.0                      # 横向比例导引常数 N
+  nav_ratio_y: 2.0                      # 纵向比例导引常数 N
+  # 输出轴符号（±1）。内部数学为 PX4 基准（lateral=+1 roll=+ex，longitudinal=-1
+  # pitch=-ey）；BF 顶相机 pitch 方向与 PX4 相反，故 longitudinal=+1。
+  lateral_output_sign: 1.0              # 横向(roll)输出符号（与 PX4 同向）
+  longitudinal_output_sign: 1.0         # 纵向(pitch)：BF +=低头，与 PX4 -1.0 相反
+  derotate_body_rates: false             # 是否用机体角速度去旋转视线速率
+  derotate_pitch_to_x_gain: 1.0         # pitch 角速度→x 像速去旋转增益
+  derotate_roll_to_y_gain: 1.0          # roll 角速度→y 像速去旋转增益
+  residual_rate_limit_rad_s: 0.7        # 残差速率限制（rad/s）
+  closure_base_scale: 0.7               # 闭合率基准缩放
+  closure_area_gain: 0.35               # 由框面积推闭合率的增益
+  max_feedforward_rad_s: 1.05           # 前馈角速度上限（rad/s）
+  fov_trim_kp_rate: 0.35                # 视场修正比例增益
+  # fov_trim 随目标变大（接近末端）淡出：area_ratio 在 [start,full] 间线性淡出。
+  # 本档开启淡出：前段强修正、末段淡出，避免末端画面边缘扰动抖动。
+  fov_trim_fade_area_ratio_start: 0.0020   # fov_trim 淡出起始面积比
+  fov_trim_fade_area_ratio_full: 0.0080    # fov_trim 淡出完全面积比
+  vertical_aim_ey: 0.02                 # 垂直瞄准偏置（归一化 ey；正=瞄目标上方）
+  # 末端倾角瞄准（按姿态把瞄准点前移；gain=0 表示关；本档占位块与仿真 mid 一致）。
+  terminal_tilt_aim_area_ratio_start: 0.0300   # 起始面积比
+  terminal_tilt_aim_area_ratio_full: 0.1200    # 完全面积比
+  terminal_tilt_aim_roll_gain: 0.0          # roll 倾角→瞄准点增益
+  terminal_tilt_aim_pitch_gain: 0.0         # pitch 倾角→瞄准点增益
+  terminal_tilt_aim_max_offset_norm: 0.0    # 倾角瞄准最大偏移（归一化）
+  los_rate_hold_tau_s: 0.08             # 视线角速度保持时间常数（s）
+  # 视觉预测：用像速 × 检测延时外推目标位置，补偿检测滞后（默认开，与仿真一致）。
+  visual_prediction_enable: true            # 是否启用视觉外推
+  visual_prediction_max_age_s: 0.22         # 外推所用最大检测延时（s）
+  visual_prediction_max_offset_norm: 0.16   # 外推最大偏移（归一化）
+  edge_guard_enable: false              # 边缘保护（接近出框时回拉）
+  edge_guard_start_norm: 0.20           # 边缘保护起始归一化偏移
+  edge_guard_full_norm: 0.38            # 边缘保护完全归一化偏移
+  edge_guard_kp_rate: 0.85              # 边缘保护比例增益
+  edge_guard_min_rate_rad_s: 0.08       # 边缘保护最小角速度（rad/s）
+  edge_guard_max_rate_rad_s: 0.55       # 边缘保护最大角速度（rad/s）
+  edge_guard_pitch_scale: 0.0           # 边缘保护 pitch 轴缩放
+  pursuit_fallback_enable: false        # 纯追踪兜底（PNG 弱时）
+  pursuit_fallback_kp_rate: 1.05        # 追踪兜底比例增益
+  pursuit_fallback_start_norm: 0.04     # 追踪兜底起始归一化偏移
+  pursuit_fallback_full_norm: 0.30      # 追踪兜底完全归一化偏移
+  pursuit_fallback_min_rate_rad_s: 0.22 # 追踪兜底最小角速度（rad/s）
+  pursuit_fallback_max_rate_rad_s: 0.85 # 追踪兜底最大角速度（rad/s）
+  pursuit_fallback_png_weak_rate_rad_s: 0.20  # 判定 PNG 弱的角速度阈值（rad/s）
+  terminal_stale_lateral_trim_enable: true    # 末端检测过期时横向微调
+  terminal_stale_lateral_trim_area_ratio_start: 0.0025  # 起始面积比
+  terminal_stale_lateral_trim_area_ratio_full: 0.0060   # 完全面积比
+  terminal_stale_lateral_trim_stale_s_start: 0.08       # 过期起始（s）
+  terminal_stale_lateral_trim_stale_s_full: 0.22        # 过期完全（s）
+  terminal_stale_lateral_trim_kp_rate: 1.6              # 横向微调增益
+  terminal_stale_lateral_trim_max_rate_rad_s: 0.18      # 横向微调上限（rad/s）
+  terminal_intercept_enable: true       # 末端拦截前置（按未来位置瞄准）
+  terminal_intercept_area_ratio_start: 0.0012   # 起始面积比
+  terminal_intercept_area_ratio_full: 0.0060    # 完全面积比
+  terminal_intercept_lead_s: 0.20       # 拦截前瞻时间（s）
+  terminal_intercept_kp_rate: 1.45       # 拦截比例增益
+  terminal_intercept_max_rate_rad_s: 0.28  # 拦截角速度上限（rad/s）
+  terminal_crossing_enable: true        # 末端横穿抑制
+  terminal_crossing_area_ratio_start: 0.0025    # 起始面积比
+  terminal_crossing_area_ratio_full: 0.0100     # 完全面积比
+  terminal_crossing_rate_start_norm_s: 0.08     # 起始归一化像速（1/s）
+  terminal_crossing_rate_full_norm_s: 0.35      # 完全归一化像速（1/s）
+  terminal_crossing_kd_rate: 0.70       # 横穿抑制微分增益
+  terminal_crossing_max_rate_rad_s: 0.18  # 横穿抑制角速度上限（rad/s）
+  terminal_forward_speed_guard_enable: true     # 末端前向速度保护
+  terminal_forward_speed_guard_area_ratio_start: 0.0035  # 起始面积比
+  terminal_forward_speed_guard_area_ratio_full: 0.0120   # 完全面积比
+  terminal_forward_speed_guard_start_m_s: 36.0  # 起始前向速度（m/s）
+  terminal_forward_speed_guard_full_m_s: 44.0   # 完全前向速度（m/s）
+  terminal_forward_speed_guard_min_positive_pitch_scale: 0.55  # 最小正 pitch 缩放
+  # --- 倾角安全包络（基于姿态反馈的软/硬限幅；deg 单位）---
+  # 软限幅：|姿态| 进入 [max-band, max] 时按比例压制"继续增大倾角"方向的角速度。
+  # 硬限幅：|姿态| 超过 max+margin 时改输出 -kp*姿态 的回平角速度（限幅）。
+  tilt_cap:
+    enable: true                          # 包络总开关（首飞前台架核实姿态/角速度符号一致）
+    max_roll_angle_deg: 60.0              # roll 最大倾角（deg）
+    max_pitch_angle_deg: 60.0             # pitch 最大倾角（deg）
+    softcap_band_deg: 5.0                # 软限幅过渡带宽（deg）
+    hardcap_margin_deg: 5.0               # 硬限幅触发余量（deg）
+    hardcap_level_kp: 3.0                 # 硬限幅回平 P 增益（1/s）
+    hardcap_max_level_rate_deg_s: 86.0    # 回平角速度上限（deg/s，≈1.5 rad/s）
+    out_lpf_tau_s: 0.0                    # 包络输出低通时间常数（s，0=关）
+    out_max_jerk_deg_s2: 1500.0              # 包络输出 jerk 限制（deg/s²，0=关）

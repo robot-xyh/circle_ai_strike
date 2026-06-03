@@ -1,0 +1,2735 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>AI Vision Tracking</title>
+<style>
+html,body{height:100%;margin:0;}
+body{font-family:system-ui,sans-serif;background:#1a1a1e;color:#e8e8ec;display:flex;flex-direction:column;overflow:hidden;}
+header{padding:6px 12px;background:#25252c;border-bottom:1px solid #333;display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;}
+#debugSplit{flex:1;min-height:0;display:flex;flex-direction:row;overflow:hidden;}
+.splitPane{flex:0 0 auto;min-width:180px;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+.splitPanePlots{flex:1 1 0;min-width:240px;}
+.splitPaneInner{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
+.splitDivider{
+  flex:0 0 6px;min-width:6px;cursor:col-resize;touch-action:none;
+  background:linear-gradient(90deg,#1e1e24 0%,#3a3a44 50%,#1e1e24 100%);
+  border-left:1px solid #2a2a32;border-right:1px solid #2a2a32;
+  transition:background .12s;
+}
+.splitDivider:hover,.splitDivider.dragging{background:linear-gradient(90deg,#252530 0%,#4a6a9a 50%,#252530 100%);}
+.tuneOnlyWidgets{display:flex;flex:1;align-items:center;flex-wrap:wrap;gap:8px 12px;min-width:0;}
+.headerThrustBars{display:none;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:0;width:min(200px,36vw);flex:0 0 auto;}
+.headerThrustBars.on{display:flex;}
+.headerThrustBars .thrustBarRow{grid-template-columns:38px minmax(0,1fr) 46px;gap:4px;margin:0;padding:1px 0;width:100%;align-items:center;}
+.headerThrustBars .thrustBarLabel{font-size:9px;line-height:1;}
+.headerThrustBars .thrustBarTrack{height:6px;border-radius:3px;}
+.headerThrustBars .thrustBarValue{font-size:9px;line-height:1;}
+.tuneRow{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;padding:10px 14px;}
+.tuneMain{flex:1;min-width:280px;width:100%;}
+.paramFab{
+  flex:0 0 auto;align-self:center;
+  display:flex;align-items:center;justify-content:center;
+  width:40px;height:40px;padding:0;border:none;border-radius:50%;
+  background:#3a5a8a;color:#fff;font-size:18px;line-height:1;cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.35);
+}
+.paramFab:hover{background:#4a6a9a;}
+.paramFab:active{transform:scale(.96);}
+.paramModal{
+  display:none;position:fixed;inset:0;z-index:10050;
+  flex-direction:column;align-items:stretch;justify-content:flex-start;
+  padding:0;
+}
+.paramModal.open{display:flex;}
+.paramModalBackdrop{position:absolute;inset:0;background:rgba(0,0,0,.48);cursor:pointer;}
+.paramModalDialog{
+  position:relative;z-index:1;
+  flex:1;min-height:0;width:100%;height:100%;
+  display:flex;flex-direction:column;overflow:hidden;
+  background:#1c1c22;border:none;border-radius:0;
+  box-shadow:none;
+}
+.paramModalHeader{
+  flex:0 0 auto;
+  padding:8px 10px;
+  border-bottom:1px solid #3a3a44;
+  background:linear-gradient(180deg,#28282f 0%,#232328 100%);
+}
+.paramModalHeader .paramPanelHead{margin:0;align-items:center;}
+.paramModalDialog #paramPanel{
+  flex:1;min-height:0;width:100%;max-width:100%;
+  overflow-x:auto;overflow-y:auto;
+  border:none;border-radius:0;margin:0;
+  padding:8px 10px 12px;align-self:stretch;
+  background:#222;
+}
+.paramModalClose{
+  flex:0 0 auto;margin-left:8px;padding:4px 12px;border:1px solid #555;border-radius:4px;
+  background:#3a3a42;color:#eee;font-size:20px;line-height:1;cursor:pointer;
+}
+.paramModalClose:hover{background:#4a4a54;}
+.row{display:flex;flex-wrap:wrap;gap:14px;}
+canvas{background:#111;border:1px solid #333;border-radius:4px;display:block;margin-bottom:8px;width:100%;max-width:100%;}
+h3{margin:8px 0 4px;font-size:13px;color:#9ab;}
+#paramPanel{
+  box-sizing:border-box;
+  width:100%;max-width:100%;min-width:0;
+  flex:1;min-height:0;
+  overflow-x:auto;overflow-y:auto;
+  background:#222;padding:8px 10px 12px;border:none;border-radius:0;
+}
+#paramPanel table{width:100%;max-width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px;}
+#paramPanel td{padding:4px 8px 4px 6px;vertical-align:middle;border-bottom:1px solid #333;}
+#paramPanel td.pname{white-space:normal;word-break:break-word;width:36%;max-width:40vw;}
+#paramPanel input[type=number]{width:72px;max-width:22vw;box-sizing:border-box;background:#111;color:#eee;border:1px solid #555;border-radius:3px;}
+#paramPanel input[type=range]{width:min(160px,100%);max-width:100%;min-width:72px;box-sizing:border-box;}
+.paramPanelHead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+.paramPanelHead h3{margin:0;}
+.paramRefreshBtn{font-size:12px;padding:4px 10px;border-radius:4px;border:1px solid #555;background:#333;color:#ccc;cursor:pointer;}
+.paramRefreshBtn:hover{background:#404040;}
+#paramPrefixLabel{font-size:11px;font-family:monospace;color:#7a9;background:#1c2a1c;border:1px solid #3a5a3a;border-radius:4px;padding:2px 7px;letter-spacing:0.02em;flex:1 1 auto;}
+.pname{color:#9cf;word-break:normal;overflow-wrap:normal;}
+.paramName{color:#9cf;}
+.paramRowFocus td{background:#232a36;}
+.paramUnitHint{margin-top:3px;font-size:10px;color:#7c8aa3;font-family:ui-monospace,monospace;line-height:1.2;user-select:all;cursor:text;}
+.paramUnitHint code{font-family:ui-monospace,monospace;background:#1a1f29;border:1px solid #2d3745;border-radius:3px;padding:0 4px;color:#9fb3d4;user-select:all;}
+.paramDispUnit{margin-left:4px;font-size:10px;color:#6c7585;font-family:ui-monospace,monospace;}
+.msg{color:#f88;font-size:12px;margin:6px 0;}
+#dryRunBanner{display:none;}
+#viewVideo{padding:8px 10px;box-sizing:border-box;width:100%;min-height:0;display:flex;flex-direction:column;}
+.videoStage{flex:1;min-height:100px;width:100%;max-width:100%;margin:0 auto;box-sizing:border-box;display:flex;align-items:center;justify-content:center;}
+#debugMjpeg,.videoStage #debugVideo{
+  width:100%;max-width:100%;height:auto;
+  max-height:100%;
+  object-fit:contain;
+  vertical-align:middle;
+  border:1px solid #333;border-radius:4px;background:#08080a;
+  display:block;margin:0 auto;
+}
+.videoStage #debugVideo{display:none;}
+.videoStage.webrtcPending #debugVideo{display:block;}
+.videoStage.webrtcPending #debugMjpeg{display:none;}
+.videoStage.webrtcLive #debugVideo{display:block;}
+.videoStage.webrtcLive #debugMjpeg{display:none;}
+.videoStage.webrtcError #debugVideo{display:block;}
+.videoStage.webrtcError #debugMjpeg{display:none;}
+.videoStatus{margin:8px 0 0;width:100%;color:#9ab;font:12px ui-monospace,monospace;line-height:1.35;text-align:left;white-space:pre-wrap;flex-shrink:0;}
+.videoToolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 0;width:100%;color:#bcd;font:12px ui-sans-serif,system-ui,sans-serif;flex-shrink:0;}
+.videoToolbar label{color:#9ab;}
+.videoToolbar input[type=number]{width:72px;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:4px 6px;}
+.videoToolbar button{padding:4px 12px;border-radius:4px;border:1px solid #555;background:#333;color:#ddd;cursor:pointer;}
+.videoToolbar button:hover{background:#404048;}
+.videoToolbar button:disabled{opacity:.45;cursor:not-allowed;}
+.videoToolbarHint{font-size:11px;color:#7a8;font-family:ui-monospace,monospace;}
+.plotStatusBar{margin-top:12px;padding-top:8px;border-top:1px solid #2a2a2e;font-size:10px;line-height:1.3;color:#4a4a52;font-family:ui-monospace,monospace;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.plotStatusBar.plotStatusWarn{color:#5a5048;}
+.plotStatusBar.plotStatusErr{color:#5c3a3a;}
+#plotStatus{cursor:default;}
+/* Plot column width follows the right pane; time bar grid tracks PLOT_PAD_L + plot + PLOT_PAD_R (=720 nominal). */
+.plotColumn{
+  width:100%;
+  max-width:100%;
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+}
+#viewTune{width:100%;box-sizing:border-box;}
+.plotTimeAxisGrid{
+  display:grid;
+  grid-template-columns:calc(100% * 46/720) calc(100% * 616/720) calc(100% * 58/720);
+  width:100%;
+  margin:0 auto;
+  box-sizing:border-box;
+  min-width:0;
+  align-items:center;
+}
+.plotTimeAxisBar{flex:0 0 auto;width:100%;padding:0 0 4px;border-bottom:1px solid #2a2a32;margin-bottom:4px;box-sizing:border-box;}
+.plotTimeAxisBar.disabled{opacity:.5;pointer-events:none;}
+.plotTimeAxisGutterL{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  padding-right:2px;
+}
+.plotTimeAxisLabel{font-size:10px;color:#7a8faf;font-weight:600;letter-spacing:.03em;line-height:1;}
+.plotTimeScrubberCell{min-width:0;width:100%;}
+#plotTimeScrubber{
+  display:block;
+  width:100%;
+  min-width:0;
+  height:6px;
+  accent-color:#4a6a9a;
+  cursor:pointer;
+  box-sizing:border-box;
+}
+.plotTimeAxisGutterR{min-width:0;}
+.plotTimeReadoutSubRow{
+  margin:2px auto 0;
+  width:100%;
+  display:grid;
+  grid-template-columns:calc(100% * 46/720) calc(100% * 616/720) calc(100% * 58/720);
+  box-sizing:border-box;
+  min-width:0;
+  align-items:start;
+}
+.plotTimeAxisReadout{
+  font:9px ui-monospace,monospace;
+  color:#8a92a0;
+  line-height:1.25;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  min-width:0;
+}
+.plotTimeReadoutSubRow .plotTimeAxisGutterL,
+.plotTimeReadoutSubRow .plotTimeAxisGutterR{min-height:0;}
+.statePill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid #3a3d44;background:#26292f;color:#eef2ff;cursor:default;white-space:nowrap;line-height:1.2;}
+.statePill .pillDot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:0 0 auto;opacity:.85;}
+.statePill .pillDur{font-weight:500;letter-spacing:0;color:#aab4c4;font-family:ui-monospace,monospace;font-size:10px;}
+.statePill.wait{border-color:#5a5d66;background:#2c2f36;color:#cfd6e2;}
+.statePill.track{border-color:#2f7ce6;background:#162338;color:#9dc6ff;}
+.statePill.coast{border-color:#c9a227;background:#2c2516;color:#ffd97a;}
+.statePill.capture{border-color:#b347d9;background:#2a1834;color:#e2a4ff;}
+.statePill.strike{border-color:#e64545;background:#36181a;color:#ff9a9a;}
+.statePill.dry{border-color:#e08540;background:#3a1f0e;color:#ffb673;animation:pillPulse 1.2s ease-in-out infinite;}
+/* rates_ctrl coast subtype themes — same palette family as the plot
+   background colours so the pill matches what you see on the timeline. */
+.statePill.forcelv{border-color:#e64545;background:#36181a;color:#ff9a9a;}
+.statePill.lvlwait{border-color:#7a6d4d;background:#2a2519;color:#d4c89a;}
+.statePill.commit{border-color:#c9a227;background:#2c2516;color:#ffd97a;}
+.statePill.fafb{border-color:#b08d27;background:#2c2418;color:#f1c95a;}
+@keyframes pillPulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+#trackStateCard{display:none;}
+.thrustBarRow{display:grid;grid-template-columns:46px 1fr 64px;align-items:center;gap:8px;margin:3px 0;}
+.thrustBarLabel{font-family:ui-monospace,monospace;font-size:11px;color:#9aa6b8;}
+.thrustBarTrack{position:relative;height:10px;background:#0e1219;border:1px solid #2a3140;border-radius:4px;overflow:hidden;}
+.thrustBarFill{position:absolute;top:0;left:0;bottom:0;width:0;border-radius:3px;transition:width 120ms linear,background 120ms linear;}
+.thrustBarFill.act{background:linear-gradient(90deg,#ffb347,#ffcb6b);}
+.thrustBarFill.cmd{background:linear-gradient(90deg,#66aaff,#82c0ff);}
+.thrustBarFill.set{background:linear-gradient(90deg,#66ff66,#9cff9c);}
+.thrustBarValue{font-family:ui-monospace,monospace;font-size:11px;color:#e6ecf5;text-align:right;}
+.thrustBarValue.stale{color:#6a727f;}
+.plotChartTooltip{position:fixed;z-index:9999;display:none;pointer-events:none;background:#1e1e24;color:#e8e8ec;border:1px solid #4a4a58;border-radius:6px;padding:5px 7px;font:10px ui-monospace,monospace,sans-serif;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,.45);max-width:min(340px,48vw);white-space:pre-wrap;word-break:break-word;}
+</style></head><body>
+<div id="dryRunBanner"></div>
+<header>
+  <span style="color:#888;font-size:13px;margin-right:4px;flex-shrink:0">AI Vision Tracking</span>
+  <div id="tuneOnlyWidgets" class="tuneOnlyWidgets">
+    <span id="trackStatePill" class="statePill wait" title="Waiting for samples"><span class="pillDot"></span><span id="trackStatePillText">WAIT</span><span id="trackStatePillDur" class="pillDur"></span></span>
+    <span id="dryRunPill" class="statePill dry" style="display:none" title="DRY-RUN: this executor is not sending commands to PX4"><span class="pillDot"></span>DRY-RUN</span>
+    <div id="thrustBars" class="headerThrustBars">
+      <div class="thrustBarRow"><span class="thrustBarLabel">T_act</span><div class="thrustBarTrack"><div id="thrustBarFillAct" class="thrustBarFill act"></div></div><span id="thrustBarValAct" class="thrustBarValue">--</span></div>
+      <div class="thrustBarRow"><span class="thrustBarLabel" id="thrustBarLabelCmd">T_cmd</span><div class="thrustBarTrack"><div id="thrustBarFillCmd" class="thrustBarFill cmd"></div></div><span id="thrustBarValCmd" class="thrustBarValue">--</span></div>
+      <div class="thrustBarRow" id="thrustBarRowSet"><span class="thrustBarLabel" id="thrustBarLabelSet">T_set</span><div class="thrustBarTrack"><div id="thrustBarFillSet" class="thrustBarFill set"></div></div><span id="thrustBarValSet" class="thrustBarValue">--</span></div>
+    </div>
+  </div>
+  <button type="button" id="btnParamFab" class="paramFab" title="Parameters">⚙</button>
+</header>
+<div id="debugSplit" class="debugSplit">
+<div id="paneVideo" class="splitPane splitPaneVideo">
+<div class="splitPaneInner">
+<div id="viewVideo"><div class="videoStage" id="videoStage"><video id="debugVideo" playsinline muted autoplay></video><img id="debugMjpeg" class="debugMjpeg" alt="Live preview (MJPEG)"/></div><div class="videoToolbar" id="videoToolbar"><label for="videoMaxFpsInput">Debug video max FPS</label><input type="number" id="videoMaxFpsInput" min="1" max="60" step="0.5" /><button type="button" id="btnApplyVideoMaxFps">Apply</button><span id="videoMaxFpsHint" class="videoToolbarHint"></span></div><div id="videoStatus" class="videoStatus">Video idle</div></div>
+</div>
+</div>
+<div id="splitDivider" class="splitDivider" role="separator" aria-orientation="vertical" aria-label="Resize video and plots" tabindex="0"></div>
+<div id="panePlots" class="splitPane splitPanePlots">
+<div class="splitPaneInner">
+<div id="viewTune">
+<div class="tuneRow">
+<div class="tuneMain">
+  <div class="plotColumn">
+  <div id="plotTimeAxisBar" class="plotTimeAxisBar disabled">
+    <div class="plotTimeAxisGrid">
+      <div class="plotTimeAxisGutterL">
+        <span class="plotTimeAxisLabel" id="plotTimeAxisLabel">Time</span>
+      </div>
+      <div class="plotTimeScrubberCell">
+        <input type="range" id="plotTimeScrubber" min="0" max="0" value="0" step="1" disabled aria-label="Scrub plot time, all charts show this sample"/>
+      </div>
+      <div class="plotTimeAxisGutterR" aria-hidden="true"></div>
+    </div>
+    <div class="plotTimeReadoutSubRow">
+      <div class="plotTimeAxisGutterL" aria-hidden="true"></div>
+      <div>
+        <span id="plotTimeAxisReadout" class="plotTimeAxisReadout">&mdash;</span>
+      </div>
+      <div class="plotTimeAxisGutterR" aria-hidden="true"></div>
+    </div>
+  </div>
+  <h3 id="h3_lateral">Lateral: ex vs roll_rate_sp (deg/s)</h3>
+  <canvas id="c_lateral" width="720" height="190"></canvas>
+  <h3 id="h3_longitudinal">Longitudinal: ey vs pitch_rate_sp (deg/s)</h3>
+  <canvas id="c_longitudinal" width="720" height="190"></canvas>
+  <h3 id="h3_att">Vehicle attitude (deg)</h3>
+  <canvas id="c_att" width="720" height="170"></canvas>
+  <h3 id="h3_thrust">Thrust: T_set / T_tgt / T_cmd / T_act</h3>
+  <canvas id="c_thrust" width="720" height="190"></canvas>
+  <h3 id="h3_rates">Body rates: setpoint vs actual (deg/s)</h3>
+  <canvas id="c_rates" width="720" height="200"></canvas>
+  <h3 id="h3_tilt">Tilt soft (0&ndash;1) &amp; hard headroom (deg)</h3>
+  <canvas id="c_tilt" width="720" height="170"></canvas>
+  <h3 id="h3_yaw">Yaw: bearing/ex/rho_scale vs yaw_rate_sp (deg/s)</h3>
+  <canvas id="c_yaw" width="720" height="190"></canvas>
+  </div>
+<div id="plotStatusBar" class="plotStatusBar"><span id="plotStatus">&hellip;</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id="paramModal" class="paramModal" aria-hidden="true">
+  <div class="paramModalBackdrop" id="paramModalBackdrop"></div>
+  <div class="paramModalDialog" id="paramModalDialog" role="dialog" aria-modal="true" aria-labelledby="paramPanelTitle">
+<div class="paramModalHeader"><div class="paramPanelHead"><h3 id="paramPanelTitle">Parameters</h3><span id="paramPrefixLabel"></span><button type="button" id="btnRefreshParams" class="paramRefreshBtn">Refresh</button><button type="button" id="btnSaveParams" class="paramRefreshBtn">Save YAML</button><button type="button" id="btnCloseParamModal" class="paramModalClose" title="Close" aria-label="Close">&times;</button></div></div>
+<div id="paramPanel">
+<div id="paramMsg" class="msg"></div>
+<table id="paramTable"><tbody></tbody></table>
+</div>
+  </div>
+</div>
+<script>
+const W = 120;
+// Fewer points + compact field group -> smaller JSON/SSE competing with WebRTC RTP.
+const M = 300;
+const SERIES_GROUPS = 'plot_page';
+const SERIES_DIGITS = 5;
+const RAD2DEG = 180 / Math.PI;
+/** Cap canvas backing-store DPR to reduce fill cost on HiDPI boards (Orange Pi, etc.). */
+const PLOT_DPR_CAP = 1.75;
+/** Max vertices per series polyline; longer traces are subsampled for drawing only. */
+const MAX_STROKE_POINTS = 640;
+/** Shared plot margins (CSS px) so every chart uses the same time-axis width: w - PLOT_PAD_L - PLOT_PAD_R. */
+const PLOT_PAD_L=46;
+const PLOT_PAD_R=58;
+const PLOT_PAD_TB=30;
+const SPLIT_RATIO_KEY='debugSplitRatio';
+const SPLIT_RATIO_DEFAULT=0.42;
+const SPLIT_RATIO_MIN=0.2;
+const SPLIT_RATIO_MAX=0.8;
+const PLOT_CANVAS_MIN_W=280;
+let splitRatio=SPLIT_RATIO_DEFAULT;
+let splitDragActive=false;
+/** false: timer + fetch /api/series.json; true: EventSource /api/series/session (long-lived). */
+const SERIES_USE_EVENTSOURCE = true;
+let plotTimer = null;
+let seriesEventSource = null;
+let seriesRequestId = 0;
+/** Last `t` array from /api/series (for scrubber readout). */
+let plotLastTimeAxisT=null;
+/** Sample index shared by scrubber, hover, and refreshPlots hov(). */
+let plotSharedHoverK=null;
+/** Last series payload (for header thrust bars on scrub). */
+let plotLastSeriesPayload=null;
+
+function plotStride(n){
+  return (n<=MAX_STROKE_POINTS)?1:Math.ceil(n/MAX_STROKE_POINTS);
+}
+/** Subsampled polyline: hover/cache still use full-resolution arrays. */
+function strokeSeriesPolyline(ctx,t,yArr,sx,syValue,plotGapBreakS,stride){
+  if(!yArr||!t.length) return false;
+  const st=Math.max(1,stride|0);
+  let moved=false, lastTk=null;
+  const emit=(k)=>{
+    const y=yArr[k];
+    if(y==null||!isFinite(y)) return;
+    const x=sx(t[k]), yy=syValue(y);
+    if(!moved){ ctx.moveTo(x,yy); moved=true; lastTk=t[k]; }
+    else{
+      if(lastTk!=null&&(t[k]-lastTk)>plotGapBreakS) ctx.moveTo(x,yy);
+      else ctx.lineTo(x,yy);
+      lastTk=t[k];
+    }
+  };
+  for(let k=0;k<t.length;k+=st) emit(k);
+  const last=t.length-1;
+  if(last>0 && (last%st)!==0) emit(last);
+  return moved;
+}
+
+// Discriminator for the controller currently being tuned. Server sends
+// "vision" | "vertical" | "rates_ctrl" | "target_strike" via tune_mode.
+function resolveTuneMode(j){
+  if(!j) return 'vision';
+  if(typeof j.tune_mode==='string'){
+    const m=j.tune_mode;
+    if(m==='vertical'||m==='rates_ctrl'||m==='vision'||m==='target_strike'||
+       m==='target_strike_png') return m;
+  }
+  return 'vision';
+}
+function isTopCamMode(mode){
+  return mode==='vertical' || mode==='rates_ctrl' || mode==='target_strike' ||
+         mode==='target_strike_png';
+}
+function isPngMode(mode){ return mode==='target_strike_png'; }
+function modeParamPrefix(mode){
+  if(mode==='vertical') return 'vertical_tracking.';
+  if(mode==='rates_ctrl') return 'vision_tracking_rates_ctrl.';
+  if(mode==='target_strike') return 'target_strike.';
+  if(mode==='target_strike_png') return 'target_strike_png.';
+  return 'vision_tracking.';
+}
+
+function closeSeriesEventSource(){
+  if(seriesEventSource){
+    try{ seriesEventSource.close(); }catch(_){}
+    seriesEventSource=null;
+  }
+}
+
+function stopTuneTimers(){
+  closeSeriesEventSource();
+  if(plotTimer){ clearInterval(plotTimer); plotTimer = null; }
+  ++seriesRequestId;
+}
+
+function openSeriesEventSource(){
+  closeSeriesEventSource();
+  const openedAtGen = seriesRequestId;
+  const q='window_s='+W+'&max_points='+M+'&groups='+
+    encodeURIComponent(SERIES_GROUPS)+'&digits='+SERIES_DIGITS;
+  const es=new EventSource('/api/series/session?'+q);
+  seriesEventSource=es;
+  es.addEventListener('series',(ev)=>{
+    if(openedAtGen!==seriesRequestId) return;
+    let j;
+    try{
+      j=JSON.parse(ev.data);
+    }catch(parseErr){
+      const snippet=(ev.data&&ev.data.length)?String(ev.data).slice(0,120).replace(/\s+/g,' '):'(empty)';
+      setPlotStatusLine('Bad JSON (SSE)',snippet+' · '+(parseErr&&parseErr.message?parseErr.message:String(parseErr)),'err');
+      return;
+    }
+    applySeriesPayload(openedAtGen, j);
+  });
+  es.onerror=()=>{
+    if(openedAtGen!==seriesRequestId) return;
+    if(es.readyState===EventSource.CLOSED){
+      closeSeriesEventSource();
+      setPlotStatusLine('series stream reconnecting','','warn');
+      setTimeout(()=>{
+        if(openedAtGen!==seriesRequestId) return;
+        openSeriesEventSource();
+      },750);
+    }
+  };
+}
+
+function startTuneTimers(){
+  stopTuneTimers();
+  if(SERIES_USE_EVENTSOURCE && typeof EventSource!=='undefined'){
+    openSeriesEventSource();
+  }else{
+    const plotMs=document.hidden?800:320;
+    plotTimer=setInterval(refreshPlots,plotMs);
+    refreshPlots();
+  }
+  refreshParams();
+}
+
+let videoSessionEvents=null;
+/** One-shot WebRTC attempt per Video tab visit (signaling after status says H.264 is ready). */
+let debugWebRtcAttempted=false;
+let debugWebRtcPc=null;
+let debugWebRtcError='';
+let debugWebRtcState='';
+let debugWebRtcStats='';
+let debugWebRtcDiag='';
+let debugVideoServerDiag='';
+let debugWebRtcRestartCount=0;
+const DEBUG_WEBRTC_MAX_RESTARTS=8;
+const DEBUG_WEBRTC_RESTART_COOLDOWN_MS=2500;
+let debugWebRtcUdpLossStreak=0;
+let debugWebRtcMjpegFallback=false;
+function enableMjpegFallbackOnUdpLoss(reason){
+  if(debugWebRtcMjpegFallback) return;
+  debugWebRtcMjpegFallback=true;
+  stopDebugWebRtc();
+  const img=document.getElementById('debugMjpeg');
+  const path=(lastDebugVideoStatus&&lastDebugVideoStatus.mjpeg_preview_path)||
+    '/api/video/mjpeg';
+  if(img){
+    img.src=path+(path.indexOf('?')>=0?'&':'?')+'t='+Date.now();
+  }
+  const stage=document.getElementById('videoStage');
+  if(stage){
+    stage.classList.remove('webrtcPending','webrtcLive');
+    stage.classList.add('webrtcError');
+  }
+  debugWebRtcError='UDP loss high; MJPEG fallback: '+(reason||'');
+  if(lastDebugVideoStatus){ appendVideoStatusLines(lastDebugVideoStatus); }
+}
+let lastDebugVideoStatus=null;
+let lastDebugInboundSample=null;
+let lastDebugWebRtcRestartAt=0;
+let lastDebugWebRtcDiagWarnAt=0;
+let lastDebugVideoServerSample=null;
+let lastDebugMjpegReconnectAt=0;
+let lastDebugMjpegPublished=0;
+function syncVideoMaxFpsFromStatus(j){
+  const inp=document.getElementById('videoMaxFpsInput');
+  const hint=document.getElementById('videoMaxFpsHint');
+  const tb=document.getElementById('videoToolbar');
+  const btn=document.getElementById('btnApplyVideoMaxFps');
+  if(!inp||!tb) return;
+  const apiOff=j&&j.param_api_enabled===false;
+  if(apiOff){
+    tb.style.opacity='0.5';
+    if(hint) hint.textContent='param API off — enable tracking_debug_param_api_enabled';
+    inp.disabled=true;
+    if(btn) btn.disabled=true;
+    return;
+  }
+  tb.style.opacity='';
+  if(hint) hint.textContent='';
+  inp.disabled=false;
+  if(btn) btn.disabled=false;
+  if(j&&typeof j.fps==='number'&&document.activeElement!==inp){
+    inp.value=String(j.fps);
+  }
+}
+async function applyVideoMaxFpsFromToolbar(){
+  const inp=document.getElementById('videoMaxFpsInput');
+  const hint=document.getElementById('videoMaxFpsHint');
+  if(!inp) return;
+  const v=parseFloat(inp.value);
+  if(!isFinite(v)){
+    if(hint) hint.textContent='invalid';
+    return;
+  }
+  if(hint) hint.textContent='';
+  try{
+    const r=await fetch('/api/param',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:'tracking_debug_max_fps',value:v})
+    });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j.ok){
+      if(hint) hint.textContent=j.error||(j.reason?String(j.reason):'HTTP '+r.status);
+      return;
+    }
+    if(hint) hint.textContent='ok';
+    setTimeout(()=>{ if(hint) hint.textContent=''; },1200);
+    const sr=await fetch('/api/video/status',{cache:'no-store'});
+    const sj=await sr.json().catch(()=>null);
+    if(sj) appendVideoStatusLines(sj);
+  }catch(e){
+    if(hint) hint.textContent=String(e);
+  }
+}
+function maybeStartDebugWebRtcFromStatus(j){
+  if(!j) return;
+  const h264Mode=(j.transport==='h264_webrtc' && j.h264_mode===true);
+  if(h264Mode && !debugWebRtcAttempted &&
+     j.encoder_ready===true){
+    debugWebRtcAttempted=true;
+    tryStartDebugWebRtc(j);
+  }
+}
+function appendVideoStatusLines(j){
+  lastDebugVideoStatus=j||lastDebugVideoStatus;
+  j=j||{};
+  const lines=[
+    'transport: '+(j.transport||'mjpeg'),
+    'browser_preview: '+(j.preview_browser||'mjpeg')+(j.mjpeg_preview_path?(' '+j.mjpeg_preview_path):''),
+    'h264_mode: '+(j.h264_mode===true?'yes':'no'),
+    'webrtc_media_ready: '+(j.webrtc_media_ready===true?'yes':'no'),
+    'encoder: '+(j.encoder||'--'),
+    'ready: '+(j.encoder_ready?'yes':'no'),
+    'clients: '+(j.active_clients==null?'--':j.active_clients),
+    'session_clients: '+(j.session_clients==null?'--':j.session_clients),
+    'series_clients: '+(j.series_clients==null?'--':j.series_clients),
+    'mjpeg_clients: '+(j.mjpeg_clients==null?'--':j.mjpeg_clients),
+    'fps: '+(j.fps==null?'--':j.fps),
+    'series_hz: '+(j.series_hz==null?'--':j.series_hz),
+    'preview_seq: '+(j.preview_seq==null?'--':j.preview_seq)+
+      ' published='+(j.published_preview_frames==null?'--':j.published_preview_frames)+
+      ' stamp_ns='+(j.preview_stamp_ns==null?'--':j.preview_stamp_ns),
+    'bitrate_kbps: '+(j.bitrate_kbps==null?'--':j.bitrate_kbps)+
+      (j.webrtc_encoder_bitrate_kbps==null?'':' effective_webrtc='+
+        j.webrtc_encoder_bitrate_kbps),
+    'status: '+(j.status||'')
+  ];
+  if(j.h264_mode===true){
+    lines.push('webrtc_server: accepted='+(j.webrtc_frames_accepted??'--')+
+      ' pushed='+(j.webrtc_frames_pushed??'--')+
+      ' dropped='+(j.webrtc_frames_dropped??'--')+
+      ' errors='+(j.webrtc_push_errors??'--')+
+      ' h264='+(j.webrtc_h264_buffers??'--')+
+      ' rtp='+(j.webrtc_rtp_packets??'--')+
+      ' size='+(j.webrtc_frame_width??'--')+'x'+(j.webrtc_frame_height??'--'));
+    lines.push('webrtc_timing_ms: q='+(j.webrtc_last_queue_wait_ms??'--')+'/'+
+      (j.webrtc_max_queue_wait_ms??'--')+
+      ' convert='+(j.webrtc_last_convert_ms??'--')+'/'+(j.webrtc_max_convert_ms??'--')+
+      ' push='+(j.webrtc_last_push_ms??'--')+'/'+(j.webrtc_max_push_ms??'--'));
+    const serverSample={
+      at:Date.now(),
+      accepted:Number(j.webrtc_frames_accepted??0),
+      pushed:Number(j.webrtc_frames_pushed??0),
+      dropped:Number(j.webrtc_frames_dropped??0),
+      h264:Number(j.webrtc_h264_buffers??0),
+      rtp:Number(j.webrtc_rtp_packets??0)
+    };
+    if(lastDebugVideoServerSample &&
+       serverSample.rtp!==lastDebugVideoServerSample.rtp){
+      const dtSec=Math.max(0.001,
+        (serverSample.at-lastDebugVideoServerSample.at)/1000.0);
+      debugVideoServerDiag='accepted='+
+        ((serverSample.accepted-lastDebugVideoServerSample.accepted)/dtSec).
+          toFixed(1)+'/s pushed='+
+        ((serverSample.pushed-lastDebugVideoServerSample.pushed)/dtSec).
+          toFixed(1)+'/s dropped='+
+        ((serverSample.dropped-lastDebugVideoServerSample.dropped)/dtSec).
+          toFixed(1)+'/s h264='+
+        ((serverSample.h264-lastDebugVideoServerSample.h264)/dtSec).
+          toFixed(1)+'/s rtp='+
+        ((serverSample.rtp-lastDebugVideoServerSample.rtp)/dtSec).toFixed(1)+'/s';
+    }
+    if(!lastDebugVideoServerSample ||
+       serverSample.rtp!==lastDebugVideoServerSample.rtp){
+      lastDebugVideoServerSample=serverSample;
+    }
+    if(debugVideoServerDiag){ lines.push('webrtc_server_diag: '+debugVideoServerDiag); }
+  }
+  lines.push('debug_render_ms: render='+(j.debug_render_ms??'--')+
+    ' publish='+(j.debug_publish_last_ms??'--')+'/'+(j.debug_publish_max_ms??'--')+
+    ' video_cb='+(j.debug_video_cb_last_ms??'--')+'/'+(j.debug_video_cb_max_ms??'--')+
+    ' jpeg='+(j.debug_video_jpeg_last_ms??'--')+'/'+(j.debug_video_jpeg_max_ms??'--')+
+    ' webrtc_enq='+(j.debug_video_webrtc_enqueue_last_ms??'--')+'/'+
+    (j.debug_video_webrtc_enqueue_max_ms??'--'));
+  lines.push('debug_save: q='+(j.debug_save_queue??'--')+
+    ' drops='+(j.debug_save_drops??'--')+
+    ' write_ms='+(j.debug_save_last_ms??'--')+'/'+(j.debug_save_max_ms??'--'));
+  if(debugWebRtcState){ lines.push('webrtc_state: '+debugWebRtcState); }
+  if(debugWebRtcStats){ lines.push('webrtc_stats: '+debugWebRtcStats); }
+  if(debugWebRtcDiag){ lines.push('webrtc_diag: '+debugWebRtcDiag); }
+  if(debugWebRtcError){ lines.push('webrtc_error: '+debugWebRtcError); }
+  setVideoStatusText(lines.join('\n'));
+  syncVideoMaxFpsFromStatus(j);
+}
+function maybeReconnectMjpegFromStatus(j){
+  if(!j || !j.mjpeg_preview_path) return;
+  const h264Mode=(j.transport==='h264_webrtc' && j.h264_mode===true);
+  const stage=document.getElementById('videoStage');
+  const webrtcLive=stage && stage.classList.contains('webrtcLive');
+  if(h264Mode && webrtcLive && !debugWebRtcMjpegFallback) return;
+  const img=document.getElementById('debugMjpeg');
+  if(!img) return;
+  const path=String(j.mjpeg_preview_path);
+  const now=Date.now();
+  const published=Number(j.published_preview_frames||0);
+  const mjpegClients=Number(j.mjpeg_clients||0);
+  const src=img.getAttribute('src')||'';
+  const missing=!src || src.indexOf('/api/video/mjpeg')<0;
+  const serverHasFrames=published>0 && published!==lastDebugMjpegPublished;
+  const streamDropped=serverHasFrames && mjpegClients===0 && !missing;
+  if((missing || streamDropped) && now-lastDebugMjpegReconnectAt>1500){
+    lastDebugMjpegReconnectAt=now;
+    img.src=path+(path.indexOf('?')>=0?'&':'?')+'t='+now;
+  }
+  if(published>0) lastDebugMjpegPublished=published;
+}
+function stopDebugWebRtc(){
+  if(debugWebRtcPc){
+    try{ debugWebRtcPc.close(); }catch(_){}
+    debugWebRtcPc=null;
+  }
+  debugWebRtcState='';
+  debugWebRtcStats='';
+  debugWebRtcDiag='';
+  debugVideoServerDiag='';
+  lastDebugInboundSample=null;
+  lastDebugVideoServerSample=null;
+  const v=document.getElementById('debugVideo');
+  const stage=document.getElementById('videoStage');
+  if(v){
+    v.srcObject=null;
+  }
+  if(stage){ stage.classList.remove('webrtcPending','webrtcLive','webrtcError'); }
+}
+function restartDebugWebRtc(reason){
+  const now=Date.now();
+  if(now-lastDebugWebRtcRestartAt<DEBUG_WEBRTC_RESTART_COOLDOWN_MS) return;
+  if(debugWebRtcRestartCount>=DEBUG_WEBRTC_MAX_RESTARTS){
+    debugWebRtcError='stalled: '+(reason||'no decoded-frame progress')+
+      ' (restart limit reached)';
+    if(lastDebugVideoStatus){ appendVideoStatusLines(lastDebugVideoStatus); }
+    return;
+  }
+  lastDebugWebRtcRestartAt=now;
+  debugWebRtcRestartCount+=1;
+  stopDebugWebRtc();
+  debugWebRtcAttempted=false;
+  debugWebRtcError='restarting WebRTC: '+(reason||'stalled')+
+    ' ('+debugWebRtcRestartCount+'/'+DEBUG_WEBRTC_MAX_RESTARTS+')';
+  if(lastDebugVideoStatus){ appendVideoStatusLines(lastDebugVideoStatus); }
+  setTimeout(()=>{
+    if(lastDebugVideoStatus){ maybeStartDebugWebRtcFromStatus(lastDebugVideoStatus); }
+  },500);
+}
+function waitForIceGatheringComplete(pc,timeoutMs){
+  if(pc.iceGatheringState==='complete') return Promise.resolve();
+  return new Promise((resolve)=>{
+    const timer=setTimeout(done,timeoutMs||2500);
+    function done(){
+      clearTimeout(timer);
+      pc.removeEventListener('icegatheringstatechange',onState);
+      resolve();
+    }
+    function onState(){
+      if(pc.iceGatheringState==='complete') done();
+    }
+    pc.addEventListener('icegatheringstatechange',onState);
+  });
+}
+async function tryStartDebugWebRtc(statusJson){
+  if(!statusJson || debugWebRtcPc || typeof RTCPeerConnection==='undefined') return;
+  if(statusJson.transport!=='h264_webrtc') return;
+  if(statusJson.h264_mode!==true || statusJson.encoder_ready!==true) return;
+  const stage=document.getElementById('videoStage');
+  const video=document.getElementById('debugVideo');
+  const img=document.getElementById('debugMjpeg');
+  // LAN-only deployment (browser and board on the same /24): host candidates
+  // suffice. Add {urls:'stun:...'} if you ever cross a NAT.
+  const pc=new RTCPeerConnection({iceServers:[]});
+  debugWebRtcPc=pc;
+  debugWebRtcError='';
+  lastDebugInboundSample=null;
+  const updateState=()=>{
+    debugWebRtcState='ice='+pc.iceConnectionState+
+      ' conn='+(pc.connectionState||'n/a')+
+      ' gather='+pc.iceGatheringState;
+    if(lastDebugVideoStatus){ appendVideoStatusLines(lastDebugVideoStatus); }
+  };
+  updateState();
+  pc.addEventListener('iceconnectionstatechange',updateState);
+  pc.addEventListener('connectionstatechange',updateState);
+  pc.addEventListener('icegatheringstatechange',updateState);
+  let connectionRestartTimer=null;
+  const scheduleConnectionRestart=(reason,delayMs)=>{
+    if(connectionRestartTimer) return;
+    connectionRestartTimer=setTimeout(()=>{
+      connectionRestartTimer=null;
+      if(debugWebRtcPc!==pc) return;
+      const failed=pc.connectionState==='failed' || pc.iceConnectionState==='failed';
+      const disconnected=pc.connectionState==='disconnected' ||
+        pc.iceConnectionState==='disconnected';
+      if(failed || disconnected){ restartDebugWebRtc(reason); }
+    },delayMs);
+  };
+  const maybeRestartOnConnectionFailure=()=>{
+    updateState();
+    if(pc.connectionState==='failed' || pc.iceConnectionState==='failed'){
+      scheduleConnectionRestart('WebRTC connection failed',0);
+    }else if(pc.connectionState==='disconnected' ||
+             pc.iceConnectionState==='disconnected'){
+      scheduleConnectionRestart('WebRTC connection disconnected',6000);
+    }
+  };
+  pc.addEventListener('iceconnectionstatechange',maybeRestartOnConnectionFailure);
+  pc.addEventListener('connectionstatechange',maybeRestartOnConnectionFailure);
+  let lastInboundAt=Date.now();
+  let lastBytesReceived=0;
+  let lastFramesDecoded=0;
+  let lastDecodedAt=Date.now();
+  let decodeLagSamples=0;
+  let jitterLagSamples=0;
+  const statsTimer=setInterval(async()=>{
+    if(debugWebRtcPc!==pc){
+      clearInterval(statsTimer);
+      return;
+    }
+    try{
+      const sampleAt=Date.now();
+      const stats=await pc.getStats();
+      let inbound='';
+      let pair='';
+      let bytesReceived=0;
+      let framesReceived=0;
+      let framesDecoded=0;
+      let inboundSample=null;
+      let stallReason='';
+      stats.forEach((s)=>{
+        if(s.type==='inbound-rtp' && s.kind==='video'){
+          bytesReceived=s.bytesReceived||0;
+          framesReceived=s.framesReceived||0;
+          framesDecoded=s.framesDecoded||0;
+          let deltaStats='';
+          inboundSample={
+            jbDelay:s.jitterBufferDelay,
+            jbEmit:s.jitterBufferEmittedCount,
+            decodeTime:s.totalDecodeTime,
+            bytesReceived:bytesReceived,
+            packetsReceived:s.packetsReceived||0,
+            packetsLost:s.packetsLost||0,
+            framesDropped:s.framesDropped||0,
+            freezeCount:s.freezeCount||0,
+            framesReceived:framesReceived,
+            framesDecoded:framesDecoded,
+            at:sampleAt
+          };
+          if(lastDebugInboundSample){
+            const dtSec=Math.max(0.001,
+              (sampleAt-(lastDebugInboundSample.at??sampleAt))/1000.0);
+            const dEmit=(s.jitterBufferEmittedCount??0)-
+              (lastDebugInboundSample.jbEmit??0);
+            const dJb=(s.jitterBufferDelay??0)-
+              (lastDebugInboundSample.jbDelay??0);
+            if(dEmit>0 && isFinite(dJb)){
+              deltaStats+=' jbAvgDelta='+(dJb/dEmit).toFixed(3)+'s';
+            }
+            const dFrames=framesDecoded-(lastDebugInboundSample.framesDecoded??0);
+            const dDecode=(s.totalDecodeTime??0)-
+              (lastDebugInboundSample.decodeTime??0);
+            if(dFrames>0 && isFinite(dDecode)){
+              deltaStats+=' decAvgDelta='+(dDecode/dFrames).toFixed(3)+'s';
+            }
+            const dRecvFrames=framesReceived-
+              (lastDebugInboundSample.framesReceived??0);
+            const backlog=framesReceived-framesDecoded;
+            const jbAvg=dEmit>0 && isFinite(dJb) ? dJb/dEmit : 0;
+            const dBytes=bytesReceived-(lastDebugInboundSample.bytesReceived??0);
+            const dPackets=(s.packetsReceived||0)-
+              (lastDebugInboundSample.packetsReceived??0);
+            const dLost=(s.packetsLost||0)-(lastDebugInboundSample.packetsLost??0);
+            const lossBase=dPackets+dLost;
+            const lossPct=lossBase>0 ? (100.0*dLost/lossBase) : 0.0;
+            const dDropped=(s.framesDropped||0)-
+              (lastDebugInboundSample.framesDropped??0);
+            const dFreezes=(s.freezeCount||0)-
+              (lastDebugInboundSample.freezeCount??0);
+            const rxKbps=Math.max(0,dBytes)*8.0/dtSec/1000.0;
+            let likely='ok';
+            if(lossPct>3.0 || dLost>=3){
+              likely='udp_loss';
+            }else if(dFrames<dRecvFrames && backlog>20 &&
+                     dDecode/dtSec>0.7){
+              likely='browser_decode_slow';
+            }else if(jbAvg>0.15 || backlog>60){
+              likely='jitter_buffer_backlog';
+            }
+            debugWebRtcDiag='likely='+likely+
+              ' rx='+rxKbps.toFixed(0)+'kbps'+
+              ' pkt='+(dPackets/dtSec).toFixed(0)+'/s'+
+              ' lost='+(dLost/dtSec).toFixed(1)+'/s'+
+              ' loss='+lossPct.toFixed(1)+'%'+
+              ' recvFps='+(dRecvFrames/dtSec).toFixed(1)+
+              ' decFps='+(dFrames/dtSec).toFixed(1)+
+              ' backlog='+backlog+
+              ' jbAvg='+jbAvg.toFixed(3)+'s'+
+              (dFrames>0 && isFinite(dDecode)?
+                (' decAvg='+(dDecode/dFrames).toFixed(3)+'s'):'')+
+              ' drop='+(dDropped/dtSec).toFixed(1)+'/s'+
+              ' freeze+=' + dFreezes;
+            // Do NOT auto-fall-back to MJPEG: it runs on the same Wi-Fi link
+            // and only doubles the load. Track the streak for diagnostics, but
+            // never trigger fallback from packet loss alone — the user can
+            // switch transport=mjpeg in YAML if the link is genuinely bad.
+            if(likely==='udp_loss' && lossPct>20.0){
+              debugWebRtcUdpLossStreak+=1;
+            }else{
+              debugWebRtcUdpLossStreak=0;
+            }
+            if((likely!=='ok' || dFreezes>0) &&
+               sampleAt-lastDebugWebRtcDiagWarnAt>5000){
+              lastDebugWebRtcDiagWarnAt=sampleAt;
+              console.warn('[debug-video] WebRTC receive issue:', debugWebRtcDiag);
+            }
+            if(dRecvFrames>0 && dFrames===0){
+              decodeLagSamples+=1;
+            }else if(backlog<20){
+              decodeLagSamples=0;
+            }
+            if(jbAvg>0.35 || backlog>90){
+              jitterLagSamples+=1;
+            }else if(jbAvg<0.15 && backlog<30){
+              jitterLagSamples=0;
+            }
+            if(decodeLagSamples>=4){
+              stallReason='RTP is arriving but video decode is stalled';
+            }else if(jitterLagSamples>=3){
+              stallReason='browser jitter buffer is backing up';
+            }
+          }
+          inbound='bytes='+bytesReceived+
+            ' packets='+(s.packetsReceived||0)+
+            ' framesRecv='+(s.framesReceived||0)+
+            ' framesDec='+framesDecoded+
+            (s.framesPerSecond!=null?(' fpsDec='+s.framesPerSecond):'')+
+            (s.packetsLost!=null?(' lost='+s.packetsLost):'')+
+            (s.framesDropped!=null?(' dropped='+s.framesDropped):'')+
+            (s.freezeCount!=null?(' freezes='+s.freezeCount):'')+
+            (s.jitter!=null?(' jitter='+Number(s.jitter).toFixed(3)+'s'):'')+
+            (s.jitterBufferDelay!=null?(' jbDelay='+Number(s.jitterBufferDelay).toFixed(3)+'s'):'')+
+            (s.jitterBufferEmittedCount!=null?(' jbEmit='+s.jitterBufferEmittedCount):'')+
+            (s.totalDecodeTime!=null?(' decTime='+Number(s.totalDecodeTime).toFixed(3)+'s'):'')+
+            deltaStats;
+        }else if(s.type==='candidate-pair' &&
+                 (s.selected===true || s.nominated===true ||
+                  s.state==='succeeded')){
+          pair=' pair='+s.state+
+            ' sent='+(s.bytesSent||0)+
+            ' recv='+(s.bytesReceived||0);
+        }
+      });
+      if(inboundSample){ lastDebugInboundSample=inboundSample; }
+      const trackInfo=(video && video.srcObject && video.srcObject.getVideoTracks &&
+        video.srcObject.getVideoTracks()[0])?
+        (' track='+video.srcObject.getVideoTracks()[0].readyState+
+         '/muted='+video.srcObject.getVideoTracks()[0].muted):'';
+      debugWebRtcStats=(inbound||'no-inbound-rtp')+pair+trackInfo;
+      if(lastDebugVideoStatus){ appendVideoStatusLines(lastDebugVideoStatus); }
+      const now=Date.now();
+      if(bytesReceived>lastBytesReceived){
+        lastBytesReceived=bytesReceived;
+        lastInboundAt=now;
+      }
+      if(framesDecoded>lastFramesDecoded){
+        lastFramesDecoded=framesDecoded;
+        lastDecodedAt=now;
+      }
+      const connected=pc.iceConnectionState==='connected' ||
+        pc.iceConnectionState==='completed' || pc.connectionState==='connected';
+      if(debugWebRtcMjpegFallback){
+        return;
+      }
+      // Restart is expensive (new SDP, decoder reset, visible freeze).
+      // Only do it when the link is *truly* silent for a long time.
+      // Packet loss / momentary stall is recovered by the encoder's
+      // frequent IDR + GstWebRTC NACK; do NOT churn the connection.
+      if(connected && now-lastInboundAt>30000){
+        restartDebugWebRtc('no inbound RTP for '+
+          Math.round((now-lastInboundAt)/1000)+'s');
+      }else if(connected && lastBytesReceived>0 && now-lastDecodedAt>20000){
+        restartDebugWebRtc('no decoded video frame for '+
+          Math.round((now-lastDecodedAt)/1000)+'s');
+      }
+    }catch(_){}
+  },1000);
+  if(stage){ stage.classList.add('webrtcPending'); }
+  if(img){ img.removeAttribute('src'); }
+  let settled=false;
+  const finishOk=()=>{
+    if(settled) return;
+    settled=true;
+    if(stage){ stage.classList.remove('webrtcPending'); stage.classList.add('webrtcLive'); }
+    if(img){ img.removeAttribute('src'); }
+  };
+  const fail=(reason)=>{
+    if(!debugWebRtcPc || debugWebRtcPc!==pc) return;
+    stopDebugWebRtc();
+    debugWebRtcError=reason||'failed';
+    if(stage){ stage.classList.add('webrtcError'); }
+    if(img){ img.removeAttribute('src'); }
+    setVideoStatusText((document.getElementById('videoStatus')?.textContent||'')+'\nWebRTC: '+(reason||'failed')+' (MJPEG fallback disabled in h264_webrtc mode)');
+  };
+  try{
+    pc.addTransceiver('video',{direction:'recvonly'});
+    const offer=await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    // Wait briefly for host + srflx; do NOT block on UPnP-IGD discovery (which
+    // may take several seconds and is unrelated to actual reachability).
+    // Whatever candidates arrived inside this window will be sent in the offer.
+    await waitForIceGatheringComplete(pc,1500);
+    const resp=await fetch('/api/webrtc/offer',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:pc.localDescription.type,sdp:pc.localDescription.sdp})
+    });
+    const j=await resp.json();
+    if(!j || !j.ok){
+      fail((j&&j.error)?String(j.error):'bad answer');
+      return;
+    }
+    const trackPromise=new Promise((res)=>{ pc.ontrack=(ev)=>{ res(ev); }; });
+    await pc.setRemoteDescription({type:j.type||'answer',sdp:j.sdp});
+    const ev=await Promise.race([
+      trackPromise,
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('track timeout')),12000))
+    ]);
+    // Real-time monitoring: minimize browser-side jitter buffer growth.
+    // Without these hints the browser inflates jbDelay to ~500ms while
+    // waiting for NACK retransmits on a lossy Wi-Fi link, which feels
+    // like persistent stutter even though the server is steady at 15 fps.
+    try{
+      const receivers=(pc.getReceivers&&pc.getReceivers())||[];
+      for(const r of receivers){
+        if(r.track && r.track.kind==='video'){
+          if('playoutDelayHint' in r){ r.playoutDelayHint=0; }
+          if('jitterBufferTarget' in r){ r.jitterBufferTarget=0; }
+        }
+      }
+    }catch(_){}
+    if(video && ev.streams && ev.streams[0]){
+      video.srcObject=ev.streams[0];
+      video.play().catch(()=>{});
+      finishOk();
+    }else{
+      fail('no media stream');
+    }
+  }catch(e){
+    fail(e && e.message ? e.message : String(e));
+  }
+}
+function setVideoStatusText(txt){
+  const el=document.getElementById('videoStatus');
+  if(el) el.textContent=txt||'';
+}
+function setDebugVideoActive(on){
+  const img=document.getElementById('debugMjpeg');
+  if(!on){
+    stopDebugWebRtc();
+    debugWebRtcAttempted=false;
+    if(videoSessionEvents){ videoSessionEvents.close(); videoSessionEvents=null; }
+    if(img){ img.removeAttribute('src'); }
+    const stage=document.getElementById('videoStage');
+    if(stage){ stage.classList.remove('webrtcPending','webrtcLive','webrtcError'); }
+    setVideoStatusText('Video idle');
+    return;
+  }
+  // Split-pane layout: video and plots run together; do not stopTuneTimers() here
+  // Keep the series polling while opening video.
+  if(videoSessionEvents) return;
+  if(img){
+    img.onerror=()=>{
+      const src=img.getAttribute('src')||'';
+      if(src.indexOf('/api/video/mjpeg')>=0){
+        img.removeAttribute('src');
+      }
+    };
+  }
+  debugWebRtcAttempted=false;
+  debugWebRtcError='';
+  debugWebRtcRestartCount=0;
+  stopDebugWebRtc();
+  setVideoStatusText('Opening debug video status...');
+  fetch('/api/video/status').then(r=>r.json()).then((j)=>{
+    maybeStartDebugWebRtcFromStatus(j);
+    appendVideoStatusLines(j);
+  }).catch(()=>{});
+  videoSessionEvents=new EventSource('/api/video/session');
+  videoSessionEvents.addEventListener('status',(ev)=>{
+    let j=null;
+    try{ j=JSON.parse(ev.data); }catch(_){ j=null; }
+    if(!j){
+      setVideoStatusText(ev.data||'bad video status');
+      return;
+    }
+    maybeReconnectMjpegFromStatus(j);
+    maybeStartDebugWebRtcFromStatus(j);
+    appendVideoStatusLines(j);
+  });
+  videoSessionEvents.onerror=()=>{
+    setVideoStatusText('Video session disconnected; reconnecting…');
+  };
+}
+
+function plotColumnContentWidth(){
+  const col=document.querySelector('#viewTune .plotColumn');
+  if(!col) return 720;
+  return Math.max(PLOT_CANVAS_MIN_W, Math.floor(col.clientWidth - 2));
+}
+
+function relayoutPlotsAfterResize(){
+  const k=(plotSharedHoverK!=null&&plotSharedHoverK>=0)?plotSharedHoverK:null;
+  redrawAllPlotCanvasesWithHover(k);
+}
+
+function applySplitRatio(r, persist){
+  const split=document.getElementById('debugSplit');
+  const paneVideo=document.getElementById('paneVideo');
+  if(!split||!paneVideo) return;
+  const total=Math.max(1, split.clientWidth - 6);
+  const minPx=Math.max(180, Math.floor(total * SPLIT_RATIO_MIN));
+  const maxPx=Math.max(minPx + 40, Math.floor(total * SPLIT_RATIO_MAX));
+  let px=Math.floor(total * r);
+  px=Math.max(minPx, Math.min(maxPx, px));
+  splitRatio=px / total;
+  paneVideo.style.flex=`0 0 ${px}px`;
+  paneVideo.style.width=`${px}px`;
+  if(persist!==false){
+    try{ localStorage.setItem(SPLIT_RATIO_KEY, String(splitRatio)); }catch(_){}
+  }
+  relayoutPlotsAfterResize();
+}
+
+function splitRatioFromPointer(clientX){
+  const split=document.getElementById('debugSplit');
+  if(!split) return splitRatio;
+  const r=split.getBoundingClientRect();
+  const total=Math.max(1, r.width - 6);
+  return (clientX - r.left) / total;
+}
+
+function splitPaneInit(){
+  try{
+    const saved=parseFloat(localStorage.getItem(SPLIT_RATIO_KEY));
+    if(isFinite(saved)) splitRatio=saved;
+  }catch(_){}
+  applySplitRatio(splitRatio, false);
+  const div=document.getElementById('splitDivider');
+  const split=document.getElementById('debugSplit');
+  if(div&&split){
+    const onMove=(ev)=>{
+      if(!splitDragActive) return;
+      ev.preventDefault();
+      applySplitRatio(splitRatioFromPointer(ev.clientX));
+    };
+    const onUp=()=>{
+      if(!splitDragActive) return;
+      splitDragActive=false;
+      div.classList.remove('dragging');
+      document.body.style.cursor='';
+      document.body.style.userSelect='';
+    };
+    const beginDrag=()=>{
+      splitDragActive=true;
+      div.classList.add('dragging');
+      document.body.style.cursor='col-resize';
+      document.body.style.userSelect='none';
+    };
+    div.addEventListener('mousedown',(ev)=>{ ev.preventDefault(); beginDrag(); });
+    div.addEventListener('touchstart',(ev)=>{
+      if(ev.touches.length!==1) return;
+      ev.preventDefault();
+      beginDrag();
+    }, {passive:false});
+    window.addEventListener('touchmove',(ev)=>{
+      if(!splitDragActive||ev.touches.length!==1) return;
+      ev.preventDefault();
+      applySplitRatio(splitRatioFromPointer(ev.touches[0].clientX));
+    }, {passive:false});
+    window.addEventListener('touchend', onUp);
+    window.addEventListener('touchcancel', onUp);
+    div.addEventListener('dblclick',()=>applySplitRatio(SPLIT_RATIO_DEFAULT));
+    div.addEventListener('keydown',(ev)=>{
+      const step=ev.shiftKey?0.08:0.04;
+      if(ev.key==='ArrowLeft'){ ev.preventDefault(); applySplitRatio(splitRatio - step); }
+      else if(ev.key==='ArrowRight'){ ev.preventDefault(); applySplitRatio(splitRatio + step); }
+      else if(ev.key==='Home'){ ev.preventDefault(); applySplitRatio(SPLIT_RATIO_MIN); }
+      else if(ev.key==='End'){ ev.preventDefault(); applySplitRatio(SPLIT_RATIO_MAX); }
+    });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('blur', onUp);
+  }
+  let resizeTimer=null;
+  window.addEventListener('resize',()=>{
+    if(resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer=setTimeout(()=>{
+      resizeTimer=null;
+      applySplitRatio(splitRatio, false);
+    }, 80);
+  });
+  document.addEventListener('visibilitychange',()=>{
+    stopTuneTimers();
+    startTuneTimers();
+  });
+}
+
+function prepareHiDPICanvas(c){
+  if(!c._lh){c._lh=Number(c.getAttribute('height'))||200;}
+  const col=c.closest('.plotColumn');
+  const targetW=col?plotColumnContentWidth():(Number(c.getAttribute('width'))||720);
+  c._lw=targetW;
+  const w=c._lw, h=c._lh;
+  const dpr=Math.min(window.devicePixelRatio||1,PLOT_DPR_CAP);
+  const bw=Math.round(w*dpr);
+  const bh=Math.round(h*dpr);
+  if(c.width!==bw||c.height!==bh){c.width=bw;c.height=bh;}
+  c.style.width=w+'px';
+  c.style.height=h+'px';
+  const ctx=c.getContext('2d',{alpha:false});
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {w,h,ctx};
+}
+
+// Phase indices mirror trackingDebugPlotPhase() (tracking_debug_phase.cpp).
+// 0..5 are generic states; 6..9 are rates_ctrl coast subtypes
+// (all imply vision_coasting=true) — added so the timeline can distinguish
+// "harmless waiting" from "tilt safety" or "FA terminal hold".
+const TRACK_PHASE_COLORS=['#5a5d66','#2f7ce6','#c9a227','#b347d9','#e64545','#6d7a88',
+                          '#e64545','#7a6d4d','#c9a227','#b08d27'];
+//                          ↑6 forceLv ↑7 lvlWait ↑8 commit ↑9 faFb
+const TRACK_PHASE_NAMES=['wait','track','coast','capture','strike','dry-run',
+                         'force-lv','lvl-wait','commit','fa-fb'];
+
+function fmtSigned(v, digits){
+  if(v==null||!isFinite(v)) return '--';
+  const d=(digits==null)?2:digits;
+  const s=Number(v).toFixed(d);
+  return (v>0?'+':'')+s;
+}
+
+function fmtPlain(v, digits){
+  if(v==null||!isFinite(v)) return '--';
+  return Number(v).toFixed(digits==null?2:digits);
+}
+
+function setTrackStateCard(phase, mode, detail){
+  const pill=document.getElementById('trackStatePill');
+  const txt=document.getElementById('trackStatePillText');
+  const dur=document.getElementById('trackStatePillDur');
+  if(!pill||!txt||!dur) return;
+  // Mirrors TRACK_PHASE_COLORS/NAMES indices. Each entry is the CSS class
+  // suffix used for `.statePill.<cls>`. Entries 6..9 are rates_ctrl-only
+  // coast subtypes; non-rates modes will never produce them.
+  const cls=['wait','track','coast','capture','strike','dry',
+             'forcelv','lvlwait','commit','fafb'];
+  let phaseIdx=(phase==null||!isFinite(phase))?0:(phase|0);
+  if(phaseIdx<0||phaseIdx>=cls.length) phaseIdx=0;
+  pill.className='statePill '+cls[phaseIdx];
+  const phaseDur=detail&&detail.phaseDurationS;
+  const phaseDurLb=detail&&detail.phaseDurationLowerBound;
+  const durTxt=(phaseDur==null||!isFinite(phaseDur))
+    ? ''
+    : ((phaseDurLb?'>=':'')+fmtPlain(phaseDur,1)+'s');
+  const tSet=detail&&detail.tSet;
+  const tTgt=detail&&detail.tTgt;
+  const tCmd=detail&&detail.tCmd;
+  const tAct=detail&&detail.tAct;
+  const zRef=detail&&detail.waitingAltRef;
+  const zErr=detail&&detail.waitingAltErr;
+  const corr=detail&&detail.waitingAltCorrection;
+  const tipThrust=((mode==='target_strike'||mode==='target_strike_png')&&detail&&detail.isBfStrike)
+    ? ('T_algo='+fmtPlain(detail.tAlgo,2)+' T_cmd='+fmtPlain(tCmd,2)+' T_act='+fmtPlain(tAct,2))
+    : (((mode==='rates_ctrl')||(mode==='target_strike')||(mode==='target_strike_png')||(mode==='vertical'))
+      ? ('T_set='+fmtPlain(tSet,2)+' T_tgt='+fmtPlain(tTgt,2)+' T_cmd='+fmtPlain(tCmd,2)+' T_act='+fmtPlain(tAct,2))
+      : ('T_set='+fmtPlain(tSet,2)+' T_cmd='+fmtPlain(tCmd,2)+' T_act='+fmtPlain(tAct,2)));
+  let label='WAIT', tipLine1='Waiting for samples', tipLine2='';
+  if(phaseIdx===5){
+    label='DRY-RUN';
+    tipLine1='Dry-run: not commanding PX4';
+    tipLine2=tipThrust;
+  }else if(mode==='rates_ctrl'||mode==='target_strike'||mode==='target_strike_png'){
+    // rates_ctrl / target_strike coast subtypes (6..9) carry actionable diagnostic info, so
+    // give each its own pill text + tooltip.
+    if(phaseIdx===1){
+      label='TRACK';
+      tipLine1='Tracking active (image PD -> body rates)';
+      tipLine2=tipThrust;
+    }else if(phaseIdx===6){
+      label='FORCE-LV';
+      tipLine1='Tilt over hard cap -> emergency leveling (rate = -hard_level_kp * attitude). '
+        +'Check tilt_hardcap_margin_rad / max_*_angle_rad if frequent.';
+      tipLine2=tipThrust;
+    }else if(phaseIdx===8){
+      label='COMMIT';
+      tipLine1='FA commit: bbox margin failed or detection stale -> '
+        +'replaying snapshot rates. Frequent triggers = bbox near edge; '
+        +'consider lowering final_approach_commit_min_margin_*_px.';
+      tipLine2=tipThrust;
+    }else if(phaseIdx===9){
+      label='FA-FB';
+      tipLine1='FA fallback: commit hold expired -> slow rate decay '
+        +'(decay_tau_s) with optional pitch_bias to keep forward momentum '
+        +'before transitioning to Waiting.';
+      tipLine2=tipThrust;
+    }else if(phaseIdx===7||phaseIdx===2){
+      label='WAIT';
+      if(zRef!=null&&isFinite(zRef)){
+        tipLine1='Waiting target: level-P + z-hold (z_err='+fmtSigned(zErr,2)+'m, corr='+fmtSigned(corr,3)+')';
+      }else{
+        tipLine1='Waiting target: level-P + yaw hold (no fresh detection)';
+      }
+      tipLine2=tipThrust;
+    }else{
+      label='LEVEL';
+      tipLine1='Waiting target: level-P + yaw hold';
+      tipLine2=tipThrust;
+    }
+  }else if(mode==='vertical'){
+    if(phaseIdx===1){
+      label='TRACK';
+      tipLine1='Tracking active (PD on ex/ey)';
+      tipLine2=tipThrust;
+    }else{
+      label='LOST';
+      if(zRef!=null&&isFinite(zRef)){
+        tipLine1='Lost target: z-hold (z_err='+fmtSigned(zErr,2)+'m, corr='+fmtSigned(corr,3)+')';
+      }else{
+        tipLine1='Lost target: level + yaw hold (no z_valid)';
+      }
+      tipLine2=tipThrust;
+    }
+  }else{
+    const map={0:'WAIT',1:'TRACK',2:'COAST',3:'CAPTURE',4:'STRIKE'};
+    label=map[phaseIdx]||'WAIT';
+    tipLine1=({0:'Waiting / hold',1:'Active tracking',2:'Coasting on last lock',3:'Capture sub-mode',4:'Strike sub-mode'}[phaseIdx])||'';
+    tipLine2=tipThrust;
+  }
+  txt.textContent=label;
+  dur.textContent=durTxt;
+  pill.title=tipLine1+(durTxt?(' \u00B7 '+durTxt):'')+(tipLine2?('\n'+tipLine2):'');
+}
+
+function setDryRunPill(on){
+  const p=document.getElementById('dryRunPill');
+  if(!p) return;
+  p.style.display=on?'inline-flex':'none';
+}
+
+function drawTrackPhaseBackground(ctx, t, phases, sx, plotTop, plotBottom){
+  if(!phases||!t||t.length<2||phases.length!==t.length) return;
+  const hFill=Math.max(1, plotBottom-plotTop);
+  const flushRun=(k0,k1,p)=>{
+    const left=sx(t[k0]), right=sx(t[k1]);
+    if(!(isFinite(left)&&isFinite(right))) return;
+    const lo=Math.min(left,right), hi=Math.max(left,right);
+    const bw=Math.max(1, hi-lo);
+    ctx.fillStyle=TRACK_PHASE_COLORS[p]||TRACK_PHASE_COLORS[0];
+    ctx.globalAlpha=0.52;
+    ctx.fillRect(lo,plotTop,bw,hFill);
+    ctx.globalAlpha=1;
+  };
+  let k0=0;
+  for(let k=1;k<t.length-1;k++){
+    if((phases[k]|0)!==(phases[k0]|0)){
+      flushRun(k0,k,phases[k0]|0);
+      k0=k;
+    }
+  }
+  flushRun(k0,t.length-1,phases[k0]|0);
+}
+
+function drawCanvas(cid, t, series, labels, colors, phases, hoverIdx){
+  const c=document.getElementById(cid);
+  if(!c||!t||t.length<1||!series||!series.length) return;
+  const {w,h,ctx}=prepareHiDPICanvas(c);
+  ctx.fillStyle='#111';ctx.fillRect(0,0,w,h);
+  // Visual gap threshold. Sized to absorb a single missed publish at the
+  // upstream tracking_debug rate (~30 Hz) plus a safety margin for the
+  // 10 Hz watchdog cadence after the 200 Hz main loop stalls. Lower values
+  // (e.g. 0.35 s) produced visible breaks every state transition.
+  const plotGapBreakS=1.0;
+  const t0=t[0],t1=t[t.length-1];
+  const tSpan=t1-t0>1e-6?t1-t0:1;
+  const padL=PLOT_PAD_L, padR=PLOT_PAD_R, padTB=PLOT_PAD_TB;
+  const plotTop=padTB, plotBottom=h-padTB;
+  const all=[];
+  series.forEach(s=>{ if(Array.isArray(s)) s.forEach(v=>{if(v!=null&&isFinite(v))all.push(v);}); });
+  let lo=Math.min(...all), hi=Math.max(...all);
+  if(!isFinite(lo)||!isFinite(hi)){lo=-1;hi=1;}
+  if(lo>0) lo=0;
+  if(hi<0) hi=0;
+  if(hi-lo<1e-9){lo-=0.5;hi+=0.5;}
+  const sx=(x)=>padL+(x-t0)/tSpan*(w-padL-padR);
+  const sy=(y)=>plotBottom-(y-lo)/(hi-lo)*(plotBottom-plotTop);
+  drawTrackPhaseBackground(ctx,t,phases,sx,plotTop,plotBottom);
+  ctx.strokeStyle='#333';
+  ctx.lineWidth=1;
+  const nDiv=4;
+  ctx.font='11px ui-monospace,monospace,sans-serif';
+  for(let i=0;i<=nDiv;i++){
+    const v=lo+(i/nDiv)*(hi-lo);
+    const y=sy(v);
+    ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(w-padR,y);ctx.stroke();
+    ctx.fillStyle='#b0b0b8';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText(v.toFixed(3),4,y);
+  }
+  if(lo<0&&hi>0){
+    const y0=sy(0);
+    ctx.save();
+    ctx.strokeStyle='rgba(220,220,235,0.55)';
+    ctx.lineWidth=1;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(padL,y0);ctx.lineTo(w-padR,y0);ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle='#d8d8e8';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText('0.000',4,y0);
+  }
+  ctx.textAlign='left';
+  ctx.fillStyle='#888';ctx.font='12px ui-monospace,monospace,sans-serif';ctx.textBaseline='alphabetic';
+  ctx.fillText(tSpan.toFixed(1)+'s',padL,h-3);
+  const st=plotStride(t.length);
+  labels.forEach((lb,i)=>{
+    if(!Array.isArray(series[i])) return;
+    ctx.strokeStyle=colors[i%colors.length];
+    ctx.lineWidth=1.5;
+    ctx.beginPath();
+    const m=strokeSeriesPolyline(ctx,t,series[i],sx,sy,plotGapBreakS,st);
+    if(m) ctx.stroke();
+  });
+  ctx.font='12px system-ui,sans-serif';
+  ctx.textBaseline='middle';
+  let ly=h-26;
+  let lx=padL;
+  const gap=14;
+  const legMax=w-padR-8;
+  labels.forEach((lb,i)=>{
+    const col=colors[i%colors.length];
+    const tw=22+ctx.measureText(lb).width;
+    if(lx+tw>legMax&&lx>padL+20){lx=padL;ly-=18;}
+    ctx.strokeStyle=col;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(lx,ly);
+    ctx.lineTo(lx+16,ly);
+    ctx.stroke();
+    ctx.fillStyle=col;
+    ctx.fillText(lb,lx+20,ly);
+    lx+=tw+gap;
+  });
+  let hk=(hoverIdx==null)?undefined:hoverIdx;
+  if(hk!=null&&(hk<0||hk>=t.length)) hk=undefined;
+  if(hk!=null){
+    const xv=sx(t[hk]);
+    ctx.save();
+    ctx.strokeStyle='rgba(210,210,225,0.7)';
+    ctx.setLineDash([5,4]);
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(xv,plotTop);
+    ctx.lineTo(xv,plotBottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    labels.forEach((lb,i)=>{
+      const arr=series[i];
+      if(!arr) return;
+      const yv=arr[hk];
+      if(yv==null||!isFinite(yv)) return;
+      const yy=sy(yv);
+      const col=colors[i%colors.length];
+      ctx.fillStyle=col;
+      ctx.strokeStyle='#08080a';
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.arc(xv,yy,4.5,0,Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+  c._lastPlot={kind:'single',cid,t,series,labels,colors,phases:phases||null};
+  c._hover={mode:'single',t,series,labels,padL,padR,padTB,w,h,t0,tSpan,lo,hi,phases:phases||null,plotTop,plotBottom};
+}
+
+function drawCanvasDualAxis(cid, t, leftSeries, leftLabels, leftColors, rightSeries, rightLabels, rightColors, phases, hoverIdx){
+  const c=document.getElementById(cid);
+  if(!c||!t||t.length<1) return;
+  const {w,h,ctx}=prepareHiDPICanvas(c);
+  ctx.fillStyle='#111';ctx.fillRect(0,0,w,h);
+  // Visual gap threshold. Sized to absorb a single missed publish at the
+  // upstream tracking_debug rate (~30 Hz) plus a safety margin for the
+  // 10 Hz watchdog cadence after the 200 Hz main loop stalls. Lower values
+  // (e.g. 0.35 s) produced visible breaks every state transition.
+  const plotGapBreakS=1.0;
+  const t0=t[0],t1=t[t.length-1];
+  const tSpan=t1-t0>1e-6?t1-t0:1;
+  const padL=PLOT_PAD_L, padR=PLOT_PAD_R, padTB=PLOT_PAD_TB;
+  const plotTop=padTB, plotBottom=h-padTB;
+  const sx=(x)=>padL+(x-t0)/tSpan*(w-padL-padR);
+  function collectMM(arrs){
+    let lo=Infinity,hi=-Infinity;
+    for(const s of arrs||[]){
+      if(!s) continue;
+      for(const v of s){
+        if(v!=null&&isFinite(v)){ if(v<lo) lo=v; if(v>hi) hi=v; }
+      }
+    }
+    if(!isFinite(lo)){ lo=-1; hi=1; }
+    if(hi-lo<1e-9){ lo-=0.5; hi+=0.5; }
+    return [lo,hi];
+  }
+  const [lLo,lHi]=collectMM(leftSeries);
+  const [rLo,rHi]=collectMM(rightSeries);
+  const syL=(y)=>plotBottom-(y-lLo)/(lHi-lLo)*(plotBottom-plotTop);
+  const syR=(y)=>plotBottom-(y-rLo)/(rHi-rLo)*(plotBottom-plotTop);
+  drawTrackPhaseBackground(ctx,t,phases,sx,plotTop,plotBottom);
+  ctx.strokeStyle='#333';
+  ctx.lineWidth=1;
+  const nDiv=4;
+  ctx.font='11px ui-monospace,monospace,sans-serif';
+  for(let i=0;i<=nDiv;i++){
+    const vL=lLo+(i/nDiv)*(lHi-lLo);
+    const y=syL(vL);
+    const vR=rLo+(plotBottom-y)/(plotBottom-plotTop)*(rHi-rLo);
+    ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(w-padR,y);ctx.stroke();
+    ctx.fillStyle='#d0d0d8';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText(vL.toFixed(3),4,y);
+    ctx.fillStyle='#a8d4ff';ctx.textAlign='right';
+    ctx.fillText(vR.toFixed(3),w-5,y);
+  }
+  ctx.textAlign='left';
+  ctx.fillStyle='#a0a0a8';ctx.font='12px ui-monospace,monospace,sans-serif';ctx.textBaseline='alphabetic';
+  ctx.fillText(tSpan.toFixed(1)+'s',padL,h-3);
+  const stDual=plotStride(t.length);
+  function strokeSeries(data,col,syFn){
+    if(!data) return;
+    ctx.strokeStyle=col; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    const m=strokeSeriesPolyline(ctx,t,data,sx,syFn,plotGapBreakS,stDual);
+    if(m) ctx.stroke();
+  }
+  (leftLabels||[]).forEach((lb,i)=>strokeSeries(leftSeries[i], leftColors[i%leftColors.length], syL));
+  (rightLabels||[]).forEach((lb,i)=>strokeSeries(rightSeries[i], rightColors[i%rightColors.length], syR));
+  ctx.font='12px system-ui,sans-serif'; ctx.textBaseline='middle';
+  let lx=padL, ly=20;
+  const items=[];
+  (leftLabels||[]).forEach((lb,i)=>items.push({lb:lb+' (L)', col:leftColors[i%leftColors.length]}));
+  (rightLabels||[]).forEach((lb,i)=>items.push({lb:lb+' (R)', col:rightColors[i%rightColors.length]}));
+  items.forEach(o=>{
+    ctx.strokeStyle=o.col; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(lx+16,ly); ctx.stroke();
+    ctx.fillStyle=o.col;
+    const tw=22+ctx.measureText(o.lb).width;
+    if(lx+tw>w-10){ lx=padL; ly+=16; }
+    ctx.fillText(o.lb,lx+20,ly);
+    lx+=tw;
+  });
+  let hk=(hoverIdx==null)?undefined:hoverIdx;
+  if(hk!=null&&(hk<0||hk>=t.length)) hk=undefined;
+  if(hk!=null){
+    const xv=sx(t[hk]);
+    ctx.save();
+    ctx.strokeStyle='rgba(210,210,225,0.7)';
+    ctx.setLineDash([5,4]);
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(xv,plotTop);
+    ctx.lineTo(xv,plotBottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    (leftSeries||[]).forEach((arr,i)=>{
+      if(!arr) return;
+      const yv=arr[hk];
+      if(yv==null||!isFinite(yv)) return;
+      const yy=syL(yv);
+      const col=leftColors[i%leftColors.length];
+      ctx.fillStyle=col;
+      ctx.strokeStyle='#08080a';
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.arc(xv,yy,4.5,0,Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    (rightSeries||[]).forEach((arr,i)=>{
+      if(!arr) return;
+      const yv=arr[hk];
+      if(yv==null||!isFinite(yv)) return;
+      const yy=syR(yv);
+      const col=rightColors[i%rightColors.length];
+      ctx.fillStyle=col;
+      ctx.strokeStyle='#08080a';
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.arc(xv,yy,4.5,0,Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+  c._lastPlot={kind:'dual',cid,t,leftSeries,leftLabels,leftColors,rightSeries,rightLabels,rightColors,phases:phases||null};
+  c._hover={mode:'dual',t,leftSeries,leftLabels,rightSeries,rightLabels,padL,padR,padTB,w,h,t0,tSpan,lLo,lHi,rLo,rHi,phases:phases||null,plotTop,plotBottom};
+}
+
+function redrawFromCache(cn){
+  const p=cn&&cn._lastPlot;
+  if(!p||!p.kind) return;
+  const hk=(cn._hoverSnapK==null||cn._hoverSnapK<0)?undefined:cn._hoverSnapK;
+  if(p.kind==='single'){
+    drawCanvas(p.cid,p.t,p.series,p.labels,p.colors,p.phases,hk);
+  }else if(p.kind==='dual'){
+    drawCanvasDualAxis(p.cid,p.t,p.leftSeries,p.leftLabels,p.leftColors,p.rightSeries,p.rightLabels,p.rightColors,p.phases,hk);
+  }
+}
+
+/** Visible plot canvas with a current frame (hidden rows are skipped for sync). */
+function plotCanvasIsActive(cn){
+  if(!cn||!cn._lastPlot||!cn._hover) return false;
+  return window.getComputedStyle(cn).display!=='none';
+}
+
+/** Short chart tag for hover (avoids full H3 titles in the tooltip). */
+const PLOT_HOVER_SHORT={c_lateral:'Lat',c_longitudinal:'Lon',c_yaw:'Yaw',c_att:'Att',c_rates:'Rate',c_tilt:'Tilt',c_thrust:'Thr'};
+function plotCompactLabelForCanvas(cn){
+  if(!cn||!cn.id) return '';
+  return PLOT_HOVER_SHORT[cn.id]||String(cn.id).replace(/^c_/,'')||'?';
+}
+
+function plotSeriesValueVisibleForHover(v){
+  return v!=null&&isFinite(v);
+}
+
+/** One chart's tooltip (time + only series that have a real marker at k, same as draw). */
+function buildPlotTooltipTextForCanvas(cn, k){
+  if(!plotCanvasIsActive(cn)||k==null||k<0) return '';
+  const hv=cn._hover, p=cn._lastPlot;
+  const t=hv&&hv.t;
+  if(!p||!t||k>=t.length) return '';
+  const dataLines=[];
+  if(p.kind==='single'){
+    (p.labels||[]).forEach((lb,i)=>{
+      const arr=(p.series||[])[i];
+      if(!Array.isArray(arr)) return;
+      const v=arr[k];
+      if(!plotSeriesValueVisibleForHover(v)) return;
+      dataLines.push(lb+':'+plotHoverFmt(v));
+    });
+  }else if(p.kind==='dual'){
+    (p.leftLabels||[]).forEach((lb,i)=>{
+      const arr=(p.leftSeries||[])[i];
+      if(!Array.isArray(arr)) return;
+      const v=arr[k];
+      if(!plotSeriesValueVisibleForHover(v)) return;
+      dataLines.push(lb+' (L):'+plotHoverFmt(v));
+    });
+    (p.rightLabels||[]).forEach((lb,i)=>{
+      const arr=(p.rightSeries||[])[i];
+      if(!Array.isArray(arr)) return;
+      const v=arr[k];
+      if(!plotSeriesValueVisibleForHover(v)) return;
+      dataLines.push(lb+' (R):'+plotHoverFmt(v));
+    });
+  }
+  if(dataLines.length<1) return '';
+  const ph=p.phases||hv.phases;
+  const phaseBit=(ph&&ph[k]!=null)?(' '+(TRACK_PHASE_NAMES[ph[k]|0]||String(ph[k]|0))):'';
+  const sec=plotCompactLabelForCanvas(cn);
+  const line1='+'+plotHoverFmt(t[k]-t[0])+'s #'+k+phaseBit+(sec?' / '+sec:'');
+  return [line1].concat(dataLines).join('\n');
+}
+function ensurePlotPerChartTooltips(){
+  const root=document.getElementById('viewTune');
+  if(!root) return;
+  for(const cn of root.querySelectorAll('canvas')){
+    if(cn._plotTooltipEl) continue;
+    const el=document.createElement('div');
+    el.className='plotChartTooltip';
+    el.setAttribute('aria-hidden','true');
+    document.body.appendChild(el);
+    cn._plotTooltipEl=el;
+  }
+}
+/**
+ * Crosshair x (logical) and the vertical position (logical y) to anchor the tooltip:
+ * same geometry as the drawn line + markers. Multiple series => mean of valid marker y.
+ */
+function plotCrosshairAndMarkerAnchorY(cn, k){
+  const m=cn._hover, p=cn._lastPlot;
+  if(!m||!p||k==null||k<0) return null;
+  const tArr=m.t;
+  if(!tArr||k>=tArr.length) return null;
+  if(!isFinite(m.tSpan)||m.tSpan<=0) return null;
+  const plotTop=m.plotTop, plotBottom=m.plotBottom, w=m.w, h=m.h;
+  const pl=m.padL, pr=m.padR, twPlot=w-pl-pr;
+  const xLog=pl+(tArr[k]-m.t0)/m.tSpan*twPlot;
+  const ys=[];
+  if(m.mode==='single'){
+    const span=Math.max(m.hi-m.lo, 1e-12);
+    const sy=(v)=>plotBottom-(v-m.lo)/span*(plotBottom-plotTop);
+    (p.series||[]).forEach((arr)=>{
+      if(!Array.isArray(arr)) return;
+      const v=arr[k];
+      if(v==null||!isFinite(v)) return;
+      ys.push(sy(v));
+    });
+  }else if(m.mode==='dual'){
+    const sL=Math.max(m.lHi-m.lLo, 1e-12);
+    const sR=Math.max(m.rHi-m.rLo, 1e-12);
+    const syL=(v)=>plotBottom-(v-m.lLo)/sL*(plotBottom-plotTop);
+    const syR=(v)=>plotBottom-(v-m.rLo)/sR*(plotBottom-plotTop);
+    (p.leftSeries||[]).forEach((arr)=>{
+      if(!Array.isArray(arr)) return;
+      const v=arr[k];
+      if(v==null||!isFinite(v)) return;
+      ys.push(syL(v));
+    });
+    (p.rightSeries||[]).forEach((arr)=>{
+      if(!Array.isArray(arr)) return;
+      const v=arr[k];
+      if(v==null||!isFinite(v)) return;
+      ys.push(syR(v));
+    });
+  }else{ return null; }
+  if(ys.length<1) return null;
+  const yLog=ys.reduce((a,b)=>a+b,0)/ys.length;
+  return {xLog, yLog, w, h};
+}
+/** Map logical (draw) coords in [0..w] x [0..h] to viewport pixels for a displayed canvas. */
+function plotLogicalToClient(cn, xLog, yLog, g){
+  const r=cn.getBoundingClientRect();
+  const w=g.w, h0=g.h;
+  if(!(w>0&&h0>0)) return {x:r.left, y:r.top};
+  return {
+    x:r.left+(xLog/w)*r.width,
+    y:r.top+(yLog/h0)*r.height,
+  };
+}
+function positionTooltipFollowCrosshair(tip, cn, k){
+  const g=plotCrosshairAndMarkerAnchorY(cn, k);
+  if(!g){
+    tip.style.left='0px';
+    tip.style.top='0px';
+    return;
+  }
+  const r=cn.getBoundingClientRect();
+  const c=plotLogicalToClient(cn, g.xLog, g.yLog, g);
+  const tw=tip.offsetWidth, th=tip.offsetHeight, vw=window.innerWidth, vh=window.innerHeight;
+  const margin=8;
+  let x=c.x+margin, y=c.y-th*0.5;
+  if(x+tw>r.right-margin) x=c.x-margin-tw;
+  if(x+tw>vw-margin) x=Math.max(margin, vw-tw-margin);
+  if(x<r.left+margin) x=r.left+margin;
+  if(x<margin) x=margin;
+  y=Math.max(margin, Math.min(y, vh-th-margin));
+  tip.style.left=Math.round(x)+'px';
+  tip.style.top=Math.round(y)+'px';
+}
+function showAllPlotTooltipsAtIndex(k){
+  const root=document.getElementById('viewTune');
+  if(!root) return;
+  ensurePlotPerChartTooltips();
+  for(const cn of root.querySelectorAll('canvas')){
+    const tip=cn._plotTooltipEl;
+    if(!tip) continue;
+    if(!plotCanvasIsActive(cn)){
+      tip.style.display='none';
+      continue;
+    }
+    const txt=buildPlotTooltipTextForCanvas(cn, k);
+    if(!txt){
+      tip.style.display='none';
+      continue;
+    }
+    tip.textContent=txt;
+    tip.style.display='block';
+    positionTooltipFollowCrosshair(tip, cn, k);
+  }
+}
+function hideAllPlotTooltips(){
+  const root=document.getElementById('viewTune');
+  if(!root) return;
+  for(const cn of root.querySelectorAll('canvas')){
+    const tip=cn._plotTooltipEl;
+    if(tip) tip.style.display='none';
+  }
+}
+
+/** Apply the same time index to all visible plots (vertical line + markers). */
+function redrawAllPlotCanvasesWithHover(k){
+  if(k!=null&&k>=0) plotSharedHoverK=k;
+  else plotSharedHoverK=null;
+  const root=document.getElementById('viewTune');
+  if(!root) return;
+  root.querySelectorAll('canvas').forEach((cn)=>{
+    if(!cn._lastPlot){ cn._hoverSnapK=null; return; }
+    if(window.getComputedStyle(cn).display==='none'){
+      cn._hoverSnapK=null;
+      return;
+    }
+    const t=cn._hover&&cn._hover.t;
+    if(k==null||k<0||!t||k>=t.length) cn._hoverSnapK=null;
+    else cn._hoverSnapK=k;
+    redrawFromCache(cn);
+  });
+}
+
+function clearAllPlotHovers(){
+  plotSharedHoverK=null;
+  hideAllPlotTooltips();
+  redrawAllPlotCanvasesWithHover(null);
+}
+
+function readPlotTimeScrubberIndex(){
+  const el=document.getElementById('plotTimeScrubber');
+  if(!el||el.disabled) return null;
+  const k=parseInt(el.value,10);
+  return isFinite(k)?k:null;
+}
+
+function updatePlotTimeAxisReadout(t,k){
+  const ro=document.getElementById('plotTimeAxisReadout');
+  if(!ro) return;
+  if(!t||t.length<1||k==null||k<0||k>=t.length){
+    ro.textContent='\u2014';
+    return;
+  }
+  const span=t[t.length-1]-t[0];
+  ro.textContent='t_rel '+plotHoverFmt(t[k]-t[0])+' s \u00B7 '+k+' / '+(t.length-1)+' \u00B7 span '+plotHoverFmt(span)+' s';
+}
+
+/** Call after each new series payload: enable slider, clamp index, refresh readout. */
+function syncPlotTimeScrubberFromSeries(t){
+  const wrap=document.getElementById('plotTimeAxisBar');
+  const el=document.getElementById('plotTimeScrubber');
+  if(!wrap||!el) return;
+  if(!t||t.length<1){
+    wrap.classList.add('disabled');
+    el.disabled=true;
+    el.max='0';
+    el.value='0';
+    plotLastTimeAxisT=null;
+    plotSharedHoverK=null;
+    hideAllPlotTooltips();
+    updatePlotTimeAxisReadout(null,null);
+    return;
+  }
+  wrap.classList.remove('disabled');
+  el.disabled=false;
+  const n=t.length;
+  const prev=parseInt(el.value,10);
+  el.max=String(Math.max(0,n-1));
+  let v=(isFinite(prev)&&prev>=0&&prev<n)?prev:(n-1);
+  el.value=String(v);
+  plotLastTimeAxisT=t;
+  plotSharedHoverK=v;
+  updatePlotTimeAxisReadout(t,v);
+}
+
+/** Sync scrubber thumb + readout while hovering (no input event). */
+function setPlotTimeScrubberIndexSilent(k){
+  const el=document.getElementById('plotTimeScrubber');
+  if(!el||el.disabled) return;
+  const n=parseInt(el.max,10)+1;
+  if(n<1) return;
+  const kk=Math.max(0,Math.min(n-1,k|0));
+  el.value=String(kk);
+  plotSharedHoverK=kk;
+  updatePlotTimeAxisReadout(plotLastTimeAxisT,kk);
+}
+
+function restorePlotCrosshairFromScrubber(){
+  const el=document.getElementById('plotTimeScrubber');
+  if(!el||el.disabled){
+    clearAllPlotHovers();
+    return;
+  }
+  const k=parseInt(el.value,10);
+  if(!isFinite(k)){
+    clearAllPlotHovers();
+    return;
+  }
+  if(plotSharedHoverK!==k) redrawAllPlotCanvasesWithHover(k);
+}
+
+function onPlotTimeScrubberInput(){
+  const el=document.getElementById('plotTimeScrubber');
+  if(!el||el.disabled) return;
+  const n=parseInt(el.max,10)+1;
+  if(n<1) return;
+  let k=parseInt(el.value,10);
+  if(!isFinite(k)) k=0;
+  k=Math.max(0,Math.min(n-1,k));
+  el.value=String(k);
+  plotSharedHoverK=k;
+  updatePlotTimeAxisReadout(plotLastTimeAxisT,k);
+  redrawAllPlotCanvasesWithHover(k);
+  if(plotLastSeriesPayload){
+    const tm=resolveTuneMode(plotLastSeriesPayload);
+    updateThrustBars(thrustDetailFromSeries(plotLastSeriesPayload,k,tm),tm,true);
+  }
+  hideAllPlotTooltips();
+}
+
+function initPlotTimeScrubber(){
+  const el=document.getElementById('plotTimeScrubber');
+  if(!el||el._plotScrubberBound) return;
+  el._plotScrubberBound=true;
+  el.addEventListener('input',onPlotTimeScrubberInput);
+}
+
+function plotHoverPickIndex(t, te){
+  if(!t||t.length<1) return -1;
+  let lo=0, hi=t.length-1;
+  while(lo<hi){
+    const mid=(lo+hi)>>1;
+    if(t[mid]<te) lo=mid+1; else hi=mid;
+  }
+  let k=lo;
+  if(k>0 && Math.abs(t[k-1]-te)<=Math.abs(t[k]-te)) k--;
+  return k;
+}
+
+function plotHoverFmt(v){
+  if(v==null||!isFinite(v)) return '\u2014';
+  const a=Math.abs(v);
+  const d=(a>=100)?1:(a>=10)?3:(a>=1)?3:4;
+  return Number(v).toFixed(d);
+}
+
+function initPlotHover(){
+  const root=document.getElementById('viewTune');
+  if(!root||root._plotHoverInit) return;
+  root._plotHoverInit=true;
+  ensurePlotPerChartTooltips();
+  root.addEventListener('mousemove',(ev)=>{
+    const cn=ev.target&&ev.target.closest?ev.target.closest('canvas'):null;
+    if(!cn||!cn._hover){
+      restorePlotCrosshairFromScrubber();
+      hideAllPlotTooltips();
+      return;
+    }
+    const m=cn._hover;
+    const r=cn.getBoundingClientRect();
+    const mx=ev.clientX-r.left;
+    let k=-1;
+    if(m.mode==='dual'){
+      if(mx<m.padL||mx>m.w-m.padR){
+        restorePlotCrosshairFromScrubber();
+        hideAllPlotTooltips();
+        return;
+      }
+      const te=m.t0+(mx-m.padL)/(m.w-m.padL-m.padR)*m.tSpan;
+      k=plotHoverPickIndex(m.t, te);
+    }else if(m.mode==='single'){
+      if(mx<m.padL||mx>m.w-m.padR){
+        restorePlotCrosshairFromScrubber();
+        hideAllPlotTooltips();
+        return;
+      }
+      const te=m.t0+(mx-m.padL)/(m.w-m.padL-m.padR)*m.tSpan;
+      k=plotHoverPickIndex(m.t, te);
+    }else{
+      hideAllPlotTooltips();
+      return;
+    }
+    if(k<0){ restorePlotCrosshairFromScrubber(); hideAllPlotTooltips(); return; }
+    setPlotTimeScrubberIndexSilent(k);
+    redrawAllPlotCanvasesWithHover(k);
+    showAllPlotTooltipsAtIndex(k);
+  });
+  root.addEventListener('mouseleave',()=>{
+    restorePlotCrosshairFromScrubber();
+    hideAllPlotTooltips();
+  });
+}
+
+function radArrToDeg(arr){
+  if(!arr) return [];
+  return arr.map(v=>(v==null||!isFinite(v))?null:(v*RAD2DEG));
+}
+
+/** PX4: thrust_z is NED (up = negative). BF strike: thrust_z is 0..1 scalar. */
+function thrustScalarDisplay(v, isBfStrike){
+  if(v==null||!isFinite(v)) return null;
+  const x=isBfStrike ? v : -v;
+  return isBfStrike ? Math.max(0, x) : x;
+}
+
+function hasFiniteSeries(j, name){
+  const a=j&&j[name];
+  return Array.isArray(a)&&a.some(v=>v!=null&&isFinite(v));
+}
+
+function isBfStrikePayload(j){
+  if(!j) return false;
+  if(j.strike_backend==='bf') return true;
+  if(j.strike_backend==='px4') return false;
+  return hasFiniteSeries(j,'vehicle_throttle_algo_norm')||
+    hasFiniteSeries(j,'vehicle_throttle_cmd_norm')||
+    hasFiniteSeries(j,'vehicle_throttle_norm')||
+    hasFiniteSeries(j,'vehicle_throttle_pwm');
+}
+
+function lastFinite(arr){
+  if(!Array.isArray(arr)||!arr.length) return null;
+  for(let i=arr.length-1;i>=0;--i){
+    const v=arr[i];
+    if(v!=null&&isFinite(v)) return v;
+  }
+  return null;
+}
+
+function seriesValueAt(arr, k){
+  if(!Array.isArray(arr)||!arr.length) return null;
+  const i=(k!=null&&k>=0&&k<arr.length)?k:(arr.length-1);
+  const v=arr[i];
+  return (v!=null&&isFinite(v))?v:null;
+}
+
+/** Header thrust bars + state card: BF uses T_algo / T_cmd / T_act (0..1). */
+function thrustDetailFromSeries(j, k, tuneMode){
+  const isBfStrike=(tuneMode==='target_strike'||tuneMode==='target_strike_png')&&
+    isBfStrikePayload(j);
+  if(isBfStrike){
+    const algoRaw=seriesValueAt(j.vehicle_throttle_algo_norm, k);
+    const cmdRaw=seriesValueAt(j.vehicle_throttle_cmd_norm, k);
+    return {
+      isBfStrike:true,
+      dryRunPassthrough:Array.isArray(j.dry_run_passthrough)&&
+        j.dry_run_passthrough.some(v=>v===1),
+      tSet:null,
+      tTgt:null,
+      tAlgo:(algoRaw!=null)?thrustScalarDisplay(algoRaw, true):null,
+      tCmd:(cmdRaw!=null)?thrustScalarDisplay(cmdRaw, true):null,
+      tAct:(()=>{
+        const raw=seriesValueAt(j.vehicle_throttle_norm, k);
+        return (raw!=null)?thrustScalarDisplay(raw, true):null;
+      })(),
+    };
+  }
+  const livePx4ThrustZ=(j.live_px4_thrust_z!=null&&isFinite(j.live_px4_thrust_z))
+    ? -j.live_px4_thrust_z : null;
+  const visionActThrust=(j.latest_actual_thrust==null||!isFinite(j.latest_actual_thrust))
+    ? null : -j.latest_actual_thrust;
+  const rawTz=seriesValueAt(j.vision_thrust_z, k);
+  return {
+    isBfStrike:false,
+    dryRunPassthrough:false,
+    tSet:seriesValueAt(j.vision_tracking_thrust, k),
+    tTgt:seriesValueAt(j.vision_thrust_target, k),
+    tCmd:(rawTz!=null)?-rawTz:
+      ((j.latest_thrust_z==null||!isFinite(j.latest_thrust_z))?null:-j.latest_thrust_z),
+    tAct:(livePx4ThrustZ!=null)?livePx4ThrustZ:visionActThrust,
+  };
+}
+
+function syncTuneVerticalLayout(mode){
+  if(typeof mode==='boolean') mode = mode ? 'vertical' : 'vision';
+  const isVert = (mode==='vertical');
+  const isRates = (mode==='rates_ctrl' || mode==='target_strike');
+  const isBfStrike = !!(plotLastSeriesPayload&&mode==='target_strike'&&
+    isBfStrikePayload(plotLastSeriesPayload));
+
+  const setText=(id,t)=>{const el=document.getElementById(id);if(el)el.textContent=t;};
+  if(mode==='target_strike_png'){
+    const isBfPng=!!(plotLastSeriesPayload&&plotLastSeriesPayload.strike_backend==='bf');
+    setText('h3_lateral','Roll overview: ex vs roll_rate_sp (deg/s)'+(isBfPng?' \u00B7 actual rate N/A (BF)':''));
+    setText('h3_longitudinal','Pitch overview: ey vs pitch_rate_sp (deg/s)'+(isBfPng?' \u00B7 actual rate N/A (BF)':''));
+    setText('h3_thrust','Throttle: '+(isBfPng?'T_algo / T_cmd / T_act (0..1, BF MSP)':'T_set / T_tgt / T_cmd / T_act'));
+    setText('h3_att','Vehicle attitude (deg) \u00B7 PNG closure & LOS');
+    setText('h3_rates','Body rates: setpoint vs actual (deg/s)'+(isBfPng?' \u00B7 actual N/A (BF)':''));
+    setText('h3_yaw','Roll components (deg/s): ff / fov_trim / edge / pursuit / stale / intercept');
+    setText('h3_tilt','Pitch components (deg/s): ff / fov_trim / edge / pursuit / intercept / crossing');
+  }else if(isRates){
+    setText('h3_lateral','Lateral: ex vs roll_rate_sp (deg/s)');
+    setText('h3_longitudinal','Longitudinal: ey vs pitch_rate_sp (deg/s)');
+    setText('h3_yaw','Yaw: ex / bearing_err / rho_scale vs yaw_rate_sp (deg/s)');
+    if(!isBfStrike) setText('h3_rates','Body rates: setpoint vs actual (deg/s)');
+    setText('h3_thrust',isBfStrike
+      ? 'Throttle: T_algo / T_cmd / T_act (0..1, BF MSP)'
+      : 'Thrust: T_set / T_tgt / T_cmd / T_act');
+    setText('h3_tilt','Tilt soft (0\u20131) & hard headroom (deg)');
+  }else if(isVert){
+    setText('h3_lateral','Lateral: ex vs roll_sp (deg)');
+    setText('h3_longitudinal','Longitudinal: ey vs pitch_sp (deg)');
+    setText('h3_yaw','Yaw: ex / rho_scale vs yaw_rate_sp (deg/s)');
+    setText('h3_rates','Body rates: actual gyro (deg/s)');
+    setText('h3_tilt','Pixel-velocity D term (ex_dot, ey_dot)');
+    setText('h3_thrust','Thrust: T_set / T_tgt / T_cmd / T_act');
+  }else{
+    setText('h3_lateral','Lateral: ex vs roll_sp (deg)');
+    setText('h3_longitudinal','Longitudinal: ey vs pitch_sp (deg)');
+    setText('h3_yaw','Yaw: ex / e_rho vs yaw_rate_sp (deg/s)');
+    setText('h3_rates','Body rates: actual gyro (deg/s)');
+    setText('h3_tilt','Range & forward speed');
+    setText('h3_thrust','Tracking thrust / floor / thrust_z');
+  }
+}
+
+function updateThrustBars(detail, mode, hasSamples){
+  const box=document.getElementById('thrustBars');
+  if(!box) return;
+  if(!isTopCamMode(mode)){ box.classList.remove('on'); return; }
+  box.classList.add('on');
+  const isBfStrike=!!(detail&&detail.isBfStrike);
+  const rowSet=document.getElementById('thrustBarRowSet');
+  const labelSet=document.getElementById('thrustBarLabelSet');
+  const labelCmd=document.getElementById('thrustBarLabelCmd');
+  if(rowSet) rowSet.style.display='';
+  if(labelSet) labelSet.textContent=isBfStrike?'T_algo':'T_set';
+  if(labelCmd) labelCmd.textContent='T_cmd';
+  const fmt=(v)=>(v==null||!isFinite(v))?'--':v.toFixed(3);
+  const clamp01=(v)=>(v==null||!isFinite(v))?0:Math.max(0,Math.min(1,v));
+  const pickFinite=(v)=>(v!=null&&isFinite(v))?v:null;
+  const tAlgo=isBfStrike?(detail?pickFinite(detail.tAlgo):null):null;
+  const tSet=isBfStrike?tAlgo:(detail?pickFinite(detail.tSet):null);
+  const tCmd=detail?pickFinite(detail.tCmd):null;
+  const tAct=detail?pickFinite(detail.tAct):null;
+  const setFill=(id,v)=>{ const el=document.getElementById(id); if(el) el.style.width=(clamp01(v)*100).toFixed(1)+'%'; };
+  const setVal=(id,v,stale)=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.textContent=fmt(v);
+    if(v==null||stale) el.classList.add('stale'); else el.classList.remove('stale');
+  };
+  const visionStale=!hasSamples;
+  setFill('thrustBarFillAct', tAct);
+  setFill('thrustBarFillCmd', tCmd);
+  setFill('thrustBarFillSet', tSet);
+  setVal('thrustBarValAct', tAct, false);
+  setVal('thrustBarValCmd', tCmd, visionStale);
+  setVal('thrustBarValSet', tSet, visionStale);
+}
+
+function setPlotStatusLine(shortText,detail,level){
+  const si=document.getElementById('plotStatus');
+  const bar=document.getElementById('plotStatusBar');
+  if(!si) return;
+  si.textContent=shortText;
+  si.title=detail||shortText;
+  if(bar){
+    bar.classList.remove('plotStatusWarn','plotStatusErr');
+    if(level==='warn') bar.classList.add('plotStatusWarn');
+    else if(level==='err') bar.classList.add('plotStatusErr');
+  }
+}
+
+let currentChartArrangement='default';
+/** PNG layout wants throttle in slot 3, i.e. right after the longitudinal chart
+ *  and before the attitude chart. Other modes keep the default DOM order. */
+function arrangePlotChartsForMode(mode){
+  const want=isPngMode(mode)?'png':'default';
+  if(want===currentChartArrangement) return;
+  const h3Thrust=document.getElementById('h3_thrust');
+  const cThrust=document.getElementById('c_thrust');
+  const h3Att=document.getElementById('h3_att');
+  const h3Rates=document.getElementById('h3_rates');
+  if(!h3Thrust||!cThrust||!h3Att||!h3Rates||!h3Thrust.parentNode) return;
+  const parent=h3Thrust.parentNode;
+  const before=(want==='png')?h3Att:h3Rates;
+  parent.insertBefore(h3Thrust, before);
+  parent.insertBefore(cThrust, before);
+  currentChartArrangement=want;
+}
+
+function applySeriesPayload(reqId, j){
+  if(reqId!==seriesRequestId) return;
+  if(!j.ok){setPlotStatusLine('Series ok=false','Response indicated failure','warn');return;}
+  const tuneMode=resolveTuneMode(j);
+    plotLastSeriesPayload=j;
+    arrangePlotChartsForMode(tuneMode);
+    syncTuneVerticalLayout(tuneMode);
+    const isBfStrike=(tuneMode==='target_strike'||tuneMode==='target_strike_png')&&
+      isBfStrikePayload(j);
+    const liveK=(Array.isArray(j.t)&&j.t.length>0)?(j.t.length-1):null;
+    // Header thrust bars follow live tail; scrubber only affects bars on manual scrub.
+    const thrustDetail=thrustDetailFromSeries(j, liveK, tuneMode);
+    const stateDetail={
+      ...thrustDetail,
+      waitingAltRef:j.latest_waiting_altitude_ref_ned,
+      waitingAltErr:j.latest_waiting_altitude_error_ned,
+      waitingAltCorrection:j.latest_waiting_altitude_correction,
+      phaseDurationS:j.latest_phase_duration_s,
+      phaseDurationLowerBound:!!j.latest_phase_duration_lower_bound,
+    };
+    if(!j.n||j.n===0){
+      syncPlotTimeScrubberFromSeries(null);
+      setTrackStateCard(undefined, tuneMode, stateDetail);
+      updateThrustBars(stateDetail, tuneMode, false);
+      setPlotStatusLine('No samples yet','Waiting for vision debug data','warn');
+      return;
+    }
+    updateThrustBars(stateDetail, tuneMode, true);
+    const t=j.t;
+    if(!Array.isArray(t)||t.length<1){setPlotStatusLine('No time axis','Malformed series payload','warn');return;}
+    if(reqId!==seriesRequestId) return;
+    const backendBadge=(typeof j.strike_backend==='string')
+      ? ' \u00B7 FC:'+j.strike_backend.toUpperCase()
+      : '';
+    setPlotStatusLine(j.n+' pts'+backendBadge,
+      backendBadge?('flight controller backend: '+j.strike_backend):'',null);
+    const tp=(Array.isArray(j.track_phase)&&j.track_phase.length===j.t.length)?j.track_phase:null;
+    setTrackStateCard(
+      (j.latest_phase!=null&&isFinite(j.latest_phase)) ? j.latest_phase
+        : (tp&&tp.length?tp[tp.length-1]:undefined),
+      tuneMode,
+      stateDetail);
+    const isPng=isPngMode(tuneMode);
+    const isRatesMode=(tuneMode==='rates_ctrl'||tuneMode==='target_strike'||isPng);
+    const isVertMode=(tuneMode==='vertical');
+    function hov(cid){
+      const el=document.getElementById(cid);
+      if(!el||!t||t.length<1) return undefined;
+      const k=plotSharedHoverK;
+      if(k==null||k<0||k>=t.length) return undefined;
+      if(window.getComputedStyle(el).display==='none') return undefined;
+      return k;
+    }
+    requestAnimationFrame(()=>{
+      if(reqId!==seriesRequestId) return;
+      plotLastTimeAxisT=t;
+      syncPlotTimeScrubberFromSeries(t);
+      const arr=(a)=>Array.isArray(a)?a:[];
+      const throttleAlgo=arr(j.vehicle_throttle_algo_norm);
+      const throttleCmd=arr(j.vehicle_throttle_cmd_norm);
+      const tAlgo=throttleAlgo.map(v=>thrustScalarDisplay(v,isBfStrike));
+      const tCmd=throttleCmd.map(v=>thrustScalarDisplay(v,isBfStrike));
+      const throttleAct=arr(j.vehicle_throttle_norm);
+      const hasThrottleAct=throttleAct.some(v=>v!=null&&isFinite(v));
+      const tAct=hasThrottleAct
+        ? throttleAct.map(v=>thrustScalarDisplay(v,isBfStrike))
+        : arr(j.vision_alt_d_term).map(v=>thrustScalarDisplay(v,isBfStrike));
+      const tSet=isBfStrike?tAlgo:arr(j.vision_tracking_thrust);
+      const tTgt=isBfStrike?[]:arr(j.vision_thrust_target||[]);
+      const bearingErrDeg=arr(j.vision_ex).map(v=>(v==null||!isFinite(v))?null:(Math.atan2(v,1)*RAD2DEG));
+
+      // (1) Lateral: ex (post/raw) vs roll_rate_sp (deg/s).
+      if(isPng){
+        drawCanvasDualAxis('c_lateral',t,[j.vision_ex],['ex'],['#f66'],
+          [radArrToDeg(j.vision_roll_sp_rad),radArrToDeg(j.vehicle_roll_rate_rad_s)],
+          ['roll_rate_sp deg/s','roll_act deg/s'],['#8af','#3a78d6'],tp,hov('c_lateral'));
+      }else if(isRatesMode){
+        drawCanvasDualAxis('c_lateral',t,[j.vision_ex,j.vision_ex_raw],['ex (post-FF)','ex_raw'],['#f66','#fcc'],
+          [radArrToDeg(j.vision_roll_sp_rad)],['roll_rate_sp deg/s'],['#8af'],tp,hov('c_lateral'));
+      }else if(isVertMode){
+        drawCanvasDualAxis('c_lateral',t,[j.vision_ex,j.vision_ex_raw],['ex (post-FF)','ex_raw'],['#f66','#fcc'],
+          [radArrToDeg(j.vision_roll_sp_rad)],['roll_sp deg'],['#8af'],tp,hov('c_lateral'));
+      }else{
+        drawCanvasDualAxis('c_lateral',t,[j.vision_ex],['ex'],['#f66'],
+          [radArrToDeg(j.vision_roll_sp_rad)],['roll_sp deg'],['#8af'],tp,hov('c_lateral'));
+      }
+
+      // (2) Longitudinal: ey (post/raw) vs pitch_rate_sp (deg/s).
+      if(isPng){
+        drawCanvasDualAxis('c_longitudinal',t,[j.vision_ey],['ey'],['#6f6'],
+          [radArrToDeg(j.vision_pitch_sp_rad),radArrToDeg(j.vehicle_pitch_rate_rad_s)],
+          ['pitch_rate_sp deg/s','pitch_act deg/s'],['#fa8','#d67a3a'],tp,hov('c_longitudinal'));
+      }else if(isRatesMode){
+        drawCanvasDualAxis('c_longitudinal',t,[j.vision_ey,j.vision_ey_raw],['ey (post-FF)','ey_raw'],['#6f6','#cfc'],
+          [radArrToDeg(j.vision_pitch_sp_rad)],['pitch_rate_sp deg/s'],['#fa8'],tp,hov('c_longitudinal'));
+      }else if(isVertMode){
+        drawCanvasDualAxis('c_longitudinal',t,[j.vision_ey,j.vision_ey_raw],['ey (post-FF)','ey_raw'],['#6f6','#cfc'],
+          [radArrToDeg(j.vision_pitch_sp_rad)],['pitch_sp deg'],['#fa8'],tp,hov('c_longitudinal'));
+      }else{
+        drawCanvasDualAxis('c_longitudinal',t,[j.vision_ey],['ey'],['#6f6'],
+          [radArrToDeg(j.vision_pitch_sp_rad)],['pitch_sp deg'],['#fa8'],tp,hov('c_longitudinal'));
+      }
+
+      // (3) Yaw slot: for PNG repurposed as roll component decomposition (deg/s).
+      if(isPng){
+        drawCanvasDualAxis('c_yaw',t,
+          [radArrToDeg(j.png_ff_roll_rad_s),radArrToDeg(j.png_fov_trim_roll_rad_s),
+           radArrToDeg(j.png_edge_guard_roll_rad_s),radArrToDeg(j.png_pursuit_roll_rad_s),
+           radArrToDeg(j.png_stale_trim_roll_rad_s),radArrToDeg(j.png_intercept_roll_rad_s),
+           radArrToDeg(j.vision_roll_sp_rad)],
+          ['ff','fov_trim','edge','pursuit','stale','intercept','roll_sp (total)'],
+          ['#8af','#9f9','#fc6','#f9a','#c9f','#6cc','#fff'],
+          [j.png_closure_scale],['closure_scale'],['#9cf'],
+          tp,hov('c_yaw'));
+      }else if(isRatesMode||isVertMode){
+        drawCanvasDualAxis('c_yaw',t,
+          [j.vision_ex,bearingErrDeg,j.vision_filtered_rho_dot],
+          ['ex (norm)','bearing_err deg','rho_scale'],
+          ['#f66','#fa8','#9cf'],
+          [radArrToDeg(j.vision_yaw_rate_sp_rad_s)],['yaw_rate_sp deg/s'],['#fc6'],
+          tp,hov('c_yaw'));
+      }else{
+        drawCanvasDualAxis('c_yaw',t,
+          [j.vision_ex,j.vision_e_rho],['ex','e_rho'],['#f66','#66f'],
+          [radArrToDeg(j.vision_yaw_rate_sp_rad_s)],['yaw_rate_sp deg/s'],['#fc6'],
+          tp,hov('c_yaw'));
+      }
+
+      // (4) Vehicle attitude (deg) - hide when source never publishes it.
+      const attHeader=document.getElementById('h3_att');
+      const attCanvas=document.getElementById('c_att');
+      const hasAtt=Array.isArray(j.vehicle_roll_rad)&&j.vehicle_roll_rad.some(v=>v!=null&&isFinite(v));
+      const showAtt=hasAtt||isPng;
+      if(attHeader) attHeader.style.display=showAtt?'':'none';
+      if(attCanvas) attCanvas.style.display=showAtt?'':'none';
+      if(showAtt&&isPng){
+        // PNG: attitude (deg) on the left, closure scale + de-rotated LOS rates on the right.
+        drawCanvasDualAxis('c_att',t,
+          [radArrToDeg(j.vehicle_roll_rad),radArrToDeg(j.vehicle_pitch_rad),radArrToDeg(j.vehicle_yaw_rad)],
+          ['roll deg','pitch deg','yaw deg'],['#8af','#fa8','#fc6'],
+          [j.png_closure_scale,j.png_ex_dot_inertial,j.png_ey_dot_inertial,j.png_entry_handoff_progress],
+          ['closure','ex_dot_los','ey_dot_los','handoff'],['#9cf','#6cc','#9f9','#e8a'],
+          tp,hov('c_att'));
+      }else if(showAtt){
+        drawCanvas('c_att',t,[radArrToDeg(j.vehicle_roll_rad),radArrToDeg(j.vehicle_pitch_rad),radArrToDeg(j.vehicle_yaw_rad)],
+          ['roll deg','pitch deg','yaw deg'],['#8af','#fa8','#fc6'],tp,hov('c_att'));
+      }
+
+      // (5) Body rates: setpoint vs actual (deg/s).
+      const ratesHeader=document.getElementById('h3_rates');
+      const ratesCanvas=document.getElementById('c_rates');
+      const hasActualRates=Array.isArray(j.vehicle_roll_rate_rad_s)&&j.vehicle_roll_rate_rad_s.some(v=>v!=null&&isFinite(v));
+      const showRates=!isBfStrike&&(tuneMode==='rates_ctrl'||hasActualRates);
+      if(ratesHeader) ratesHeader.style.display=showRates?'':'none';
+      if(ratesCanvas) ratesCanvas.style.display=showRates?'':'none';
+      if(showRates){
+        drawCanvas('c_rates',t,
+          [radArrToDeg(j.vision_roll_sp_rad),radArrToDeg(j.vision_pitch_sp_rad),radArrToDeg(j.vision_yaw_rate_sp_rad_s),
+           radArrToDeg(j.vehicle_roll_rate_rad_s),radArrToDeg(j.vehicle_pitch_rate_rad_s),radArrToDeg(j.vehicle_yaw_rate_rad_s)],
+          ['roll_sp','pitch_sp','yaw_sp','roll_act','pitch_act','yaw_act'],
+          ['#8af','#fa8','#fc6','#3a78d6','#d67a3a','#c89a1a'],
+          tp,hov('c_rates'));
+      }
+
+      // (6) Tilt slot: for PNG repurposed as pitch component decomposition (deg/s).
+      const tiltHeader=document.getElementById('h3_tilt');
+      const tiltCanvas=document.getElementById('c_tilt');
+      const showTilt=isRatesMode;
+      if(tiltHeader) tiltHeader.style.display=showTilt?'':'none';
+      if(tiltCanvas) tiltCanvas.style.display=showTilt?'':'none';
+      if(showTilt&&isPng){
+        drawCanvasDualAxis('c_tilt',t,
+          [radArrToDeg(j.png_ff_pitch_rad_s),radArrToDeg(j.png_fov_trim_pitch_rad_s),
+           radArrToDeg(j.png_edge_guard_pitch_rad_s),radArrToDeg(j.png_pursuit_pitch_rad_s),
+           radArrToDeg(j.png_intercept_pitch_rad_s),radArrToDeg(j.png_crossing_pitch_rad_s),
+           radArrToDeg(j.vision_pitch_sp_rad)],
+          ['ff','fov_trim','edge','pursuit','intercept','crossing','pitch_sp (total)'],
+          ['#8af','#9f9','#fc6','#f9a','#6cc','#c9f','#fff'],
+          [j.png_fwd_guard_scale],['fwd_guard_scale'],['#e8a'],
+          tp,hov('c_tilt'));
+      }else if(showTilt){
+        drawCanvasDualAxis('c_tilt',t,
+          [j.vision_alt_vz_command_ned,j.vision_alt_vz_error_ned],['roll_softcap','pitch_softcap'],['#9cf','#9f9'],
+          [radArrToDeg(j.vision_tilt_hard_headroom_roll_rad),radArrToDeg(j.vision_tilt_hard_headroom_pitch_rad)],
+          ['roll hard margin deg','pitch hard margin deg'],['#e8a','#ae8'],
+          tp,hov('c_tilt'));
+      }
+
+      // (7) Thrust / throttle (positive scalar = more power).
+      if(isBfStrike){
+        drawCanvas('c_thrust',t,[tAlgo,tCmd,tAct],
+          ['T_algo','T_cmd','T_act'],['#66ff66','#66aaff','#ffb347'],tp,hov('c_thrust'));
+      }else{
+        drawCanvas('c_thrust',t,[tSet,tTgt,tCmd,tAct],
+          ['T_set','T_tgt','T_cmd','T_act'],['#66ff66','#c86ffc','#66aaff','#ffb347'],tp,hov('c_thrust'));
+      }
+    });
+}
+
+async function refreshPlots(){
+  const reqId=++seriesRequestId;
+  try{
+    const q='window_s='+W+'&max_points='+M+'&groups='+
+      encodeURIComponent(SERIES_GROUPS)+'&digits='+SERIES_DIGITS;
+    const r=await fetch('/api/series.json?'+q,{cache:'no-store'});
+    if(reqId!==seriesRequestId) return;
+    const txt=await r.text();
+    if(reqId!==seriesRequestId) return;
+    let j;
+    try{ j=JSON.parse(txt); }
+    catch(parseErr){
+      const snippet=(txt&&txt.length)?txt.slice(0,120).replace(/\s+/g,' '):'(empty body)';
+      setPlotStatusLine('Bad JSON response','HTTP '+r.status+' \u00B7 '+snippet+' \u00B7 '+(parseErr&&parseErr.message?parseErr.message:String(parseErr)),'err');
+      return;
+    }
+    if(reqId!==seriesRequestId) return;
+    applySeriesPayload(reqId, j);
+  }catch(e){
+    const msg=e&&e.message?e.message:String(e);
+    const short=/network|fetch|Failed to fetch/i.test(msg)?'Network error':(/json|JSON|Unexpected end/i.test(msg)?'Bad JSON':'Request failed');
+    setPlotStatusLine(short,msg,'err');
+  }
+}
+
+function bindSliderNumber(pname, inp, rng, min, max, step, onChange){
+  const syncR=()=>{
+    let v=parseFloat(inp.value);
+    if(!isFinite(v)) return;
+    v=Math.max(min,Math.min(max,v));
+    inp.value=String(v);
+    if(max>min) rng.value=String((v-min)/(max-min));
+    if(typeof onChange==='function') onChange(v);
+  };
+  const syncI=()=>{
+    const f=parseFloat(rng.value);
+    const v=min+f*(max-min);
+    inp.value=(Math.round(v/step)*step).toFixed(step>=0.1?2:4);
+    if(typeof onChange==='function') onChange(parseFloat(inp.value));
+  };
+  inp.oninput=syncR;
+  rng.oninput=syncI;
+  syncR();
+}
+
+function getParamUnitInfo(fullName){
+  const shortName = String(fullName||'').split('.').pop();
+  const RAD2DEG_LOCAL = 180/Math.PI;
+  const DEG2RAD = Math.PI/180;
+  const fmtRad = v => (v==null||!isFinite(v))?'--':v.toFixed(7).replace(/0+$/,'').replace(/\.$/,'.0');
+  if(/_rad_s$/.test(shortName)){
+    return {
+      kind:'rate', displayUnit:'deg/s',
+      toDisplay: v => v*RAD2DEG_LOCAL,
+      fromDisplay: v => v*DEG2RAD,
+      fmtRad,
+    };
+  }
+  if(/_rad$/.test(shortName)){
+    return {
+      kind:'angle', displayUnit:'deg',
+      toDisplay: v => v*RAD2DEG_LOCAL,
+      fromDisplay: v => v*DEG2RAD,
+      fmtRad,
+    };
+  }
+  return {
+    kind:'plain', displayUnit:'',
+    toDisplay: v => v,
+    fromDisplay: v => v,
+    fmtRad: null,
+  };
+}
+
+function pickDisplayStep(unit, radStep){
+  if(unit.kind==='angle'){
+    if(radStep>=0.1) return 1.0;
+    return 0.5;
+  }
+  if(unit.kind==='rate'){
+    return 1.0;
+  }
+  return radStep;
+}
+
+function getParamUiMeta(fullName, modeOrIsVertical){
+  let mode;
+  if(typeof modeOrIsVertical==='boolean') mode = modeOrIsVertical ? 'vertical' : 'vision';
+  else mode = String(modeOrIsVertical||'vision');
+
+  const shortName = String(fullName||'').split('.').pop();
+  if(mode==='rates_ctrl'||mode==='target_strike'){
+    const ratesMeta = {
+      constant_thrust_scalar: {order:0, group:'Base thrust', groupHint:'Main tracking target scalar (T_tgt when Tracking). Waiting/ForceLevel height-hold uses hover_thrust_scalar.', desc:'Tracking thrust target (positive scalar before tilt).', focus:true},
+      hover_thrust_scalar: {order:0.25, group:'Base thrust', groupHint:'Waiting/ForceLevel z-hold baseline; Tracking ramp resets from this when leaving non-PD branches.', desc:'Hover baseline throttle scalar.', focus:true},
+      tracking_thrust_ramp_tau_s: {order:0.5, group:'Base thrust', groupHint:'0 = instant T_set step to target; larger = smoother ramp (s).', desc:'First-order ramp tau for T_set toward T_tgt in Tracking PD.'},
+      enable_tilt_compensation: {order:1, group:'Base thrust', groupHint:'When enabled, thrust scales with tilt to preserve vertical thrust component.', desc:'Tilt compensation flag.'},
+      dry_run: {order:5, group:'Switches', groupHint:'Bench safety switch. Keep off during real flight.', desc:'Do not send rates / thrust commands to PX4.', focus:true},
+      require_armed_to_command: {order:6, group:'Switches', groupHint:'L1 safety: refuse non-zero rates before PX4 is armed.', desc:'When true, executor publishes zeros until armed.'},
+      rate_shaper_diag_log: {order:7, group:'Switches', groupHint:'Flight diagnostics only.', desc:'When true, throttled INFO [RATES][shaper] logs: LPF goal vs des, jerk_lim, mag_lim, rho, tilt softcap, yaw LPF/clamp.'},
+      lateral_kp_rate: {order:10, group:'Image PD \u2192 body rate', groupHint:'Plan \u00A73.0: Kp_rate \u2248 Kp_attitude \u00B7 omega_att_loop. Tune in this order: base thrust \u2192 Kp_rate \u2192 Kd_rate \u2192 pixel-dot LPF \u2192 rate LPF.', desc:'ex error \u2192 roll rate proportional gain (rad/s per unit ex).', focus:true},
+      lateral_kd_rate: {order:11, group:'Image PD \u2192 body rate', groupHint:'Plan \u00A73.0: Kp_rate \u2248 Kp_attitude \u00B7 omega_att_loop.', desc:'Roll rate damping from filtered ex_dot.'},
+      longitudinal_kp_rate: {order:12, group:'Image PD \u2192 body rate', groupHint:'Plan \u00A73.0: Kp_rate \u2248 Kp_attitude \u00B7 omega_att_loop.', desc:'ey error \u2192 pitch rate proportional gain.', focus:true},
+      longitudinal_kd_rate: {order:13, group:'Image PD \u2192 body rate', groupHint:'Plan \u00A73.0: Kp_rate \u2248 Kp_attitude \u00B7 omega_att_loop.', desc:'Pitch rate damping from filtered ey_dot.'},
+      pixel_dot_lpf_tau_s: {order:14, group:'Image PD \u2192 body rate', groupHint:'Plan \u00A73.0: tau slightly longer than vertical (Kd term drives rate directly, noisier).', desc:'LPF on the finite-difference D term in image plane.'},
+      rate_lpf_tau_s: {order:20, group:'Rate-domain shaping', groupHint:'Plan \u00A73.2 / \u00A77-L2: smoothing on the body-rate setpoint itself (after PD).', desc:'1st-order LPF on the desired body rate before publish. Larger tau = smoother but slower.'},
+      max_jerk_rad_s2: {order:21, group:'Rate-domain shaping', groupHint:'Plan \u00A73.2 / \u00A77-L2: caps |d(rate_sp)/dt|. Limits angular acceleration of the rate command.', desc:'Per-axis jerk limit on the rate setpoint. 0 disables.', focus:true},
+      max_roll_rate_rad_s: {order:22, group:'Rate-domain shaping', groupHint:'Hard magnitude clamp on the published roll rate; clampParams() refuses anything > 4.0 rad/s.', desc:'Symmetric magnitude cap on the published roll rate.', focus:true},
+      max_pitch_rate_rad_s: {order:23, group:'Rate-domain shaping', groupHint:'Hard magnitude clamp on the published pitch rate.', desc:'Symmetric magnitude cap on the published pitch rate.', focus:true},
+      max_roll_angle_rad: {order:30, group:'Tilt soft / hard cap', groupHint:'Plan \u00A77-L3 anti-flip envelope. Soft-cap throttles the rate command as |attitude| approaches max_*_angle_rad - tilt_softcap_band_rad. Hard-cap (margin) triggers ForceLevel.', desc:'Tilt envelope upper bound for roll.', focus:true},
+      max_pitch_angle_rad: {order:31, group:'Tilt soft / hard cap', groupHint:'Plan \u00A77-L3 anti-flip envelope.', desc:'Tilt envelope upper bound for pitch.', focus:true},
+      tilt_softcap_band_rad: {order:32, group:'Tilt soft / hard cap', groupHint:'Plan \u00A77-L3 anti-flip envelope.', desc:'Width of the smoothstep taper band just inside max_*_angle_rad (shared by roll and pitch).'},
+      tilt_hardcap_margin_rad: {order:33, group:'Tilt soft / hard cap', groupHint:'Plan \u00A77-L3 anti-flip envelope.', desc:'Extra angle past max_*_angle_rad before ForceLevel kicks in.'},
+      hard_level_kp: {order:34, group:'Tilt soft / hard cap', groupHint:'ForceLevel state: roll/pitch_rate_des = -hard_level_kp \u00B7 current_attitude.', desc:'Level-recovery proportional gain inside ForceLevel.'},
+      hard_level_kp_rate: {order:34, group:'Tilt soft / hard cap', groupHint:'ForceLevel state (BF core).', desc:'Level-recovery proportional gain inside ForceLevel.'},
+      force_level_min_hold_ms: {order:35, group:'Tilt soft / hard cap', groupHint:'Minimum dwell in ForceLevel before returning to Waiting.', desc:'Min hold time in ForceLevel (ms, integer).'},
+      level_hold_enabled: {order:39, group:'Waiting level loop', groupHint:'When OFF, WaitingTarget outputs roll/pitch rate=0 (no attitude leveling). ForceLevel still active.', desc:'Enable level-P hold while waiting for target.', focus:true},
+      level_kp: {order:40, group:'Waiting level loop', groupHint:'Plan \u00A77-L4: Waiting branch is a level-P on attitude error \u2192 body rate.', desc:'Level proportional gain (rad/s per rad of tilt).', focus:true},
+      level_kp_rate: {order:40, group:'Waiting level loop', groupHint:'Waiting branch level-P (BF core).', desc:'Level proportional gain (rad/s per rad of tilt).', focus:true},
+      level_deadband_rad: {order:41, group:'Waiting level loop', groupHint:'Suppress IMU noise around upright when in Waiting.', desc:'Deadband on the level error before the level-P stage.'},
+      lost_target_rate_decay_tau_s: {order:42, group:'Waiting level loop', groupHint:'Plan \u00A77-L4: smooth blend between Tracking rate setpoint and Waiting level-P output to avoid step on detection loss.', desc:'LPF tau on the rate setpoint during Tracking \u2192 Waiting transitions.'},
+      desired_bbox_area_px: {order:50, group:'Range adaptive shaping', groupHint:'e_rho = 0.5\u00B7ln(desired_area/measured_area). The piecewise scale curve shrinks rate gains at long range. Set <= 0 to disable.', desc:'Bbox area at the desired hover height; tune so e_rho approx 0 there.', focus:true},
+      rho_scale_near: {order:51, group:'Range adaptive shaping', groupHint:'e_rho = 0.5\u00B7ln(desired_area/measured_area). Near/far thresholds are tuned in ratio domain.', desc:'Scale at the close plateau.'},
+      rho_scale_far: {order:52, group:'Range adaptive shaping', groupHint:'e_rho = 0.5\u00B7ln(desired_area/measured_area). Near/far thresholds are tuned in ratio domain.', desc:'Scale at the far plateau.'},
+      rho_scale_near_ratio: {order:53, group:'Range adaptive shaping', groupHint:'ratio = measured_area / desired_area. near_ratio must be > 1.', desc:'Close plateau threshold in area ratio domain.'},
+      rho_scale_far_ratio: {order:54, group:'Range adaptive shaping', groupHint:'ratio = measured_area / desired_area. far_ratio must be in (0,1).', desc:'Far plateau threshold in area ratio domain.'},
+      final_approach_boost_enable: {order:55, group:'Final approach boost', groupHint:'Single-stage near-range response boost gated by bbox area ratio in frame.', desc:'Enable final-approach response boost.', focus:true},
+      final_approach_area_ratio_enter: {order:56, group:'Final approach boost', groupHint:'area_ratio = bbox_area / frame_area; enter when ratio >= this threshold.', desc:'Enter threshold for boost stage.'},
+      final_approach_area_ratio_exit: {order:57, group:'Final approach boost', groupHint:'Hysteresis exit threshold (must be <= enter).', desc:'Exit threshold for boost stage.'},
+      final_approach_jerk_scale: {order:58, group:'Final approach boost', groupHint:'Effective jerk = max_jerk_rad_s2 * this scale while boost stage is active.', desc:'Jerk multiplier during final approach.'},
+      final_approach_roll_rate_scale: {order:59, group:'Final approach boost', groupHint:'Optional roll/pitch rate cap multiplier in boost stage. Keep 1.0 to disable.', desc:'Rate cap multiplier during final approach.'},
+      yaw_lock_enabled: {order:60, group:'Yaw', groupHint:'When ON, publishRates() forces yaw_rate_sp=0 and resets the yaw LPF \u2014 PX4 inner loop holds the current heading; only roll & pitch carry tracking. Other yaw_* below are bypassed while locked.', desc:'Lock yaw heading: skip bearing-driven yaw, rely on roll/pitch only.', focus:true},
+      yaw_bearing_kp: {order:61, group:'Yaw', groupHint:'Tracking follows target bearing; Waiting holds latched yaw.', desc:'Tracking yaw response to ex.'},
+      yaw_hold_gain: {order:62, group:'Yaw', groupHint:'Tracking follows target bearing; Waiting holds latched yaw.', desc:'Stiffness of Waiting heading hold.'},
+      yaw_track_deadband_rad: {order:63, group:'Yaw', groupHint:'Suppresses sub-pixel detection wobble around image center.', desc:'Tracking deadband on |atan2(ex,1)|; below this yaw_rate_sp is forced to 0.'},
+      yaw_hold_deadband_rad: {order:64, group:'Yaw', groupHint:'Suppresses sub-degree IMU yaw noise leaking into yaw_rate_sp.', desc:'Symmetric deadband on the Waiting heading-hold loop.'},
+      yaw_rate_lpf_tau_s: {order:65, group:'Yaw', groupHint:'Acts as a soft accel limit; shared across Tracking / Waiting so yaw is continuous.', desc:'1st-order LPF on yaw_rate_sp.'},
+      yaw_rate_min_rad_s: {order:66, group:'Yaw', groupHint:'Lower yaw-rate clamp.', desc:'Yaw rate min (also scaled by rho_scale during Tracking).'},
+      yaw_rate_max_rad_s: {order:67, group:'Yaw', groupHint:'Upper yaw-rate clamp.', desc:'Yaw rate max (also scaled by rho_scale during Tracking).'},
+      lateral_output_sign: {order:70, group:'Sign & deadband', groupHint:'Touch only if axes are inverted or the center region chatters.', desc:'Flip roll-rate direction if camera sign is reversed.'},
+      longitudinal_output_sign: {order:71, group:'Sign & deadband', groupHint:'Touch only if axes are inverted or the center region chatters.', desc:'Flip pitch-rate direction if camera sign is reversed.'},
+      x_deadband: {order:72, group:'Sign & deadband', groupHint:'', desc:'Normalized x deadband when px deadband is disabled.'},
+      y_deadband: {order:73, group:'Sign & deadband', groupHint:'', desc:'Normalized y deadband when px deadband is disabled.'},
+      x_deadband_px: {order:74, group:'Sign & deadband', groupHint:'', desc:'Pixel deadband around image center on x.'},
+      y_deadband_px: {order:75, group:'Sign & deadband', groupHint:'', desc:'Pixel deadband around image center on y.'},
+      min_score: {order:80, group:'Detection', groupHint:'Determine when the controller leaves Tracking and falls back to Waiting.', desc:'Reject low-confidence detections.'},
+      detection_stale_s: {order:81, group:'Detection', groupHint:'Determine when the controller leaves Tracking and falls back to Waiting.', desc:'Max detection age before Waiting.'},
+      lost_timeout_s: {order:82, group:'Detection', groupHint:'Determine when the controller leaves Tracking and falls back to Waiting.', desc:'Reserved timeout window for higher-level loss logic.'},
+      dkf_enable: {order:83, group:'Detection', groupHint:'Delayed pixel Kalman for bbox prediction when detections go stale.', desc:'Enable DKF tracker fallback.'},
+      dkf_process_accel_noise: {order:84, group:'Detection', groupHint:'DKF process noise.', desc:'Process acceleration noise (px/s^2).'},
+      dkf_meas_noise_px: {order:85, group:'Detection', groupHint:'DKF measurement noise.', desc:'Measurement noise (px).'},
+      dkf_predict_extra_delay_s: {order:86, group:'Detection', groupHint:'Extra prediction delay compensation.', desc:'Predict extra delay (s).'},
+      dkf_max_cov_trace: {order:87, group:'Detection', groupHint:'Reject DKF predictions when covariance trace exceeds this.', desc:'Max covariance trace for DKF output.'},
+      aim_offset_x_px: {order:88, group:'Sign & deadband', groupHint:'Shift desired bbox center on x.', desc:'Aim offset x (px).'},
+      aim_offset_y_px: {order:89, group:'Sign & deadband', groupHint:'Shift desired bbox center on y.', desc:'Aim offset y (px).'},
+      waiting_altitude_kp: {order:90, group:'Waiting z-hold', groupHint:'Used only when PX4 reports positionZValid().', desc:'Altitude proportional correction during Waiting.', focus:true},
+      waiting_altitude_kd: {order:91, group:'Waiting z-hold', groupHint:'Used only when PX4 reports positionZValid().', desc:'Vertical-speed damping during Waiting.', focus:true},
+      waiting_altitude_max_correction: {order:92, group:'Waiting z-hold', groupHint:'Used only when PX4 reports positionZValid().', desc:'Max thrust correction around base thrust during Waiting.'},
+      tilt_cos_floor: {order:100, group:'Safety & clamps', groupHint:'Use these only to prevent bad tilt compensation or thrust saturation.', desc:'Lower bound for tilt compensation denominator.'},
+      thrust_scalar_min: {order:101, group:'Safety & clamps', groupHint:'Core publish-boundary thrust scalar lower limit (0–1).', desc:'Minimum positive thrust_z scalar before PX4 negates to FRD body.z.'},
+      thrust_scalar_max: {order:102, group:'Safety & clamps', groupHint:'Core publish-boundary thrust scalar upper limit (0–1).', desc:'Maximum positive thrust_z scalar before PX4 negates to FRD body.z.'},
+    };
+    return ratesMeta[shortName] || {order:999, group:'Other', groupHint:'', desc:'', focus:false};
+  }
+  if(mode!=='vertical'){
+    return {order:1000, group:'Parameters', groupHint:'', desc:'', focus:false};
+  }
+  const meta = {
+    constant_thrust_scalar: {order:0, group:'Base thrust', groupHint:'Set this first so active tracking and WaitingTarget both stop drifting up or down.', desc:'Main thrust scalar for both Tracking and fallback waiting hold.', focus:true},
+    enable_tilt_compensation: {order:1, group:'Base thrust', groupHint:'Set this first so active tracking and WaitingTarget both stop drifting up or down.', desc:'When enabled, thrust scales with tilt to preserve vertical component.', focus:true},
+    dry_run: {order:5, group:'Switches', groupHint:'Bench safety switch. Keep it off during real flight.', desc:'Do not send commands to PX4 when enabled.'},
+    lateral_kp: {order:10, group:'Tracking PD', groupHint:'Tune active tracking in this order: base thrust, Kp, Kd, then pixel-dot LPF.', desc:'Image x error -> roll proportional gain.'},
+    lateral_kd: {order:11, group:'Tracking PD', groupHint:'Tune active tracking in this order: base thrust, Kp, Kd, then pixel-dot LPF.', desc:'Roll damping from filtered ex_dot.'},
+    longitudinal_kp: {order:12, group:'Tracking PD', groupHint:'Tune active tracking in this order: base thrust, Kp, Kd, then pixel-dot LPF.', desc:'Image y error -> pitch proportional gain.'},
+    longitudinal_kd: {order:13, group:'Tracking PD', groupHint:'Tune active tracking in this order: base thrust, Kp, Kd, then pixel-dot LPF.', desc:'Pitch damping from filtered ey_dot.'},
+    pixel_dot_lpf_tau_s: {order:14, group:'Tracking PD', groupHint:'Tune active tracking in this order: base thrust, Kp, Kd, then pixel-dot LPF.', desc:'Smoothing on finite-difference D term.'},
+    max_roll_angle_rad: {order:20, group:'Attitude shaping', groupHint:'These are safety shapers rather than primary tracking gains.', desc:'Roll command saturation.'},
+    max_pitch_angle_rad: {order:21, group:'Attitude shaping', groupHint:'These are safety shapers rather than primary tracking gains.', desc:'Pitch command saturation.'},
+    attitude_sp_lpf_tau_s: {order:22, group:'Attitude shaping', groupHint:'These are safety shapers rather than primary tracking gains.', desc:'Optional LPF on roll/pitch setpoints.'},
+    attitude_sp_max_rate_rad_s: {order:23, group:'Attitude shaping', groupHint:'These are safety shapers rather than primary tracking gains.', desc:'Rate limit on roll/pitch setpoint motion.'},
+    attitude_sp_max_accel_rad_s2: {order:24, group:'Attitude shaping', groupHint:'These are safety shapers rather than primary tracking gains.', desc:'2nd-order shaper: cap |d(rate)/dt| so setpoint follows an S-curve. 0 disables.'},
+    desired_bbox_area_px: {order:30, group:'Range adaptive shaping', groupHint:'e_rho = 0.5\u00B7ln(desired_area/measured_area) is the log distance ratio (>0 = far, <0 = close).', desc:'Bbox area at the desired hover height. Tune so e_rho approx 0 at hover.', focus:true},
+    rho_scale_near: {order:31, group:'Range adaptive shaping', groupHint:'e_rho = 0.5\u00B7ln(desired_area/measured_area).', desc:'Scale at the close plateau (e_rho <= near_thresh). 1.0 = full rate/accel.'},
+    rho_scale_far: {order:32, group:'Range adaptive shaping', groupHint:'e_rho = 0.5\u00B7ln(desired_area/measured_area).', desc:'Scale at the far plateau (e_rho >= far_thresh). <1 = smoother motion.'},
+    rho_scale_near_thresh: {order:33, group:'Range adaptive shaping', groupHint:'e_rho = 0.5\u00B7ln(desired_area/measured_area).', desc:'e_rho where scale saturates to near; default -0.35 ~ d = 0.7 * d_desired.'},
+    rho_scale_far_thresh: {order:34, group:'Range adaptive shaping', groupHint:'e_rho = 0.5\u00B7ln(desired_area/measured_area).', desc:'e_rho where scale saturates to far; default 0.55 ~ d = 1.73 * d_desired.'},
+    yaw_bearing_kp: {order:40, group:'Yaw', groupHint:'Tracking follows target bearing; WaitingTarget latches the current yaw instead of returning to entry heading.', desc:'Tracking yaw response to ex.'},
+    yaw_hold_gain: {order:41, group:'Yaw', groupHint:'Tracking follows target bearing; WaitingTarget latches the current yaw instead of returning to entry heading.', desc:'How stiffly WaitingTarget holds yaw after loss.'},
+    yaw_track_deadband_rad: {order:42, group:'Yaw', groupHint:'Tracking follows target bearing; WaitingTarget latches the current yaw instead of returning to entry heading.', desc:'Tracking deadband on |atan2(ex,1)|; below this bearing error yaw_rate_sp is forced to 0.'},
+    yaw_hold_deadband_rad: {order:43, group:'Yaw', groupHint:'Tracking follows target bearing; WaitingTarget latches the current yaw instead of returning to entry heading.', desc:'Symmetric deadband on the WaitingTarget heading-hold loop.'},
+    yaw_rate_lpf_tau_s: {order:44, group:'Yaw', groupHint:'Tracking follows target bearing; WaitingTarget latches the current yaw instead of returning to entry heading.', desc:'1st-order LPF on yaw_rate_sp.'},
+    yaw_rate_min_rad_s: {order:45, group:'Yaw', groupHint:'Tracking follows target bearing; WaitingTarget latches the current yaw instead of returning to entry heading.', desc:'Lower yaw-rate clamp (also scaled by rho_scale during Tracking).'},
+    yaw_rate_max_rad_s: {order:46, group:'Yaw', groupHint:'Tracking follows target bearing; WaitingTarget latches the current yaw instead of returning to entry heading.', desc:'Upper yaw-rate clamp (also scaled by rho_scale during Tracking).'},
+    lateral_output_sign: {order:50, group:'Sign & deadband', groupHint:'Touch these only if axes are inverted or the center region chatters.', desc:'Flip roll direction if camera sign is reversed.'},
+    longitudinal_output_sign: {order:51, group:'Sign & deadband', groupHint:'Touch these only if axes are inverted or the center region chatters.', desc:'Flip pitch direction if camera sign is reversed.'},
+    x_deadband: {order:52, group:'Sign & deadband', groupHint:'Touch these only if axes are inverted or the center region chatters.', desc:'Normalized x deadband when px deadband is disabled.'},
+    y_deadband: {order:53, group:'Sign & deadband', groupHint:'Touch these only if axes are inverted or the center region chatters.', desc:'Normalized y deadband when px deadband is disabled.'},
+    x_deadband_px: {order:54, group:'Sign & deadband', groupHint:'Touch these only if axes are inverted or the center region chatters.', desc:'Pixel deadband around image center on x.'},
+    y_deadband_px: {order:55, group:'Sign & deadband', groupHint:'Touch these only if axes are inverted or the center region chatters.', desc:'Pixel deadband around image center on y.'},
+    min_score: {order:60, group:'Detection', groupHint:'These determine when the controller leaves Tracking and falls back to WaitingTarget.', desc:'Reject low-confidence detections.'},
+    detection_stale_s: {order:61, group:'Detection', groupHint:'These determine when the controller leaves Tracking and falls back to WaitingTarget.', desc:'Max detection age before WaitingTarget.'},
+    lost_timeout_s: {order:62, group:'Detection', groupHint:'These determine when the controller leaves Tracking and falls back to WaitingTarget.', desc:'Reserved timeout window for higher-level loss logic.'},
+    min_bbox_area_px: {order:63, group:'Detection', groupHint:'These determine when the controller leaves Tracking and falls back to WaitingTarget.', desc:'Reject very small detections.'},
+    max_bbox_aspect_ratio: {order:64, group:'Detection', groupHint:'These determine when the controller leaves Tracking and falls back to WaitingTarget.', desc:'Reject stretched bounding boxes.'},
+    attitude_ff_enable: {order:70, group:'Attitude FF compensation', groupHint:'Cancels the apparent ex/ey shift caused by current vehicle roll/pitch.', desc:'Enable feed-forward subtraction of current tilt from ex/ey before deadband and PD.'},
+    attitude_ff_pitch_gain: {order:71, group:'Attitude FF compensation', groupHint:'Cancels the apparent ex/ey shift caused by current vehicle roll/pitch.', desc:'ey_corr = ey + gain * tan(pitch). Default -1 for upward-looking top camera.'},
+    attitude_ff_roll_gain: {order:72, group:'Attitude FF compensation', groupHint:'Cancels the apparent ex/ey shift caused by current vehicle roll/pitch.', desc:'ex_corr = ex + gain * tan(roll). Flip sign if you observe runaway roll oscillation after enabling FF.'},
+    attitude_ff_max_tilt_rad: {order:73, group:'Attitude FF compensation', groupHint:'Cancels the apparent ex/ey shift caused by current vehicle roll/pitch.', desc:'Roll/pitch magnitude clamp before tan() to bound FF correction.'},
+    attitude_ff_max_age_s: {order:74, group:'Attitude FF compensation', groupHint:'Cancels the apparent ex/ey shift caused by current vehicle roll/pitch.', desc:'FF freshness gate. Bypass FF when detection age exceeds this. 0 disables.', focus:true},
+    lost_target_attitude_decay_tau_s: {order:75, group:'Lost target attitude', groupHint:'Drives how roll/pitch_sp settles when detection is stale.', desc:'LPF tau used by the wait-state attitude decay shaper.', focus:true},
+    lost_target_attitude_safety_s: {order:76, group:'Lost target attitude', groupHint:'Drives how roll/pitch_sp settles when detection is stale.', desc:'After this many seconds in unbroken wait, force roll/pitch_sp to 0 immediately. 0 disables.'},
+    waiting_altitude_kp: {order:80, group:'Lost target z-hold', groupHint:'Used only when PX4 reports positionZValid().', desc:'Altitude proportional correction during WaitingTarget.', focus:true},
+    waiting_altitude_kd: {order:81, group:'Lost target z-hold', groupHint:'Used only when PX4 reports positionZValid().', desc:'Vertical-speed damping during WaitingTarget.', focus:true},
+    waiting_altitude_max_correction: {order:82, group:'Lost target z-hold', groupHint:'Used only when PX4 reports positionZValid().', desc:'Maximum thrust correction around base thrust.', focus:true},
+    tilt_cos_floor: {order:90, group:'Safety & clamps', groupHint:'Use these only to prevent bad tilt compensation or thrust saturation.', desc:'Lower bound for tilt compensation denominator.'},
+    attitude_thrust_z_min: {order:91, group:'Safety & clamps', groupHint:'Use these only to prevent bad tilt compensation or thrust saturation.', desc:'Most negative thrust_z command allowed.'},
+    attitude_thrust_z_max: {order:92, group:'Safety & clamps', groupHint:'Use these only to prevent bad tilt compensation or thrust saturation.', desc:'Least negative thrust_z command allowed.'},
+  };
+  return meta[shortName] || {order:999, group:'Other', groupHint:'', desc:'', focus:false};
+}
+
+async function postParam(name, value){
+  const r=await fetch('/api/param',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,value})});
+  const j=await r.json().catch(()=>({}));
+  return {ok:r.ok&&j.ok,status:r.status,j};
+}
+
+function paramValueMatches(entry, expected){
+  if(!entry) return false;
+  if(entry.type==='bool') return !!entry.value===!!expected;
+  if(entry.type==='double') return Math.abs(Number(entry.value)-Number(expected))<1e-9;
+  return entry.value===expected;
+}
+
+async function refreshParamsAfterApply(name, expected, retries=10){
+  for(let i=0;i<retries;i++){
+    const r=await fetch('/api/params.json',{cache:'no-store'});
+    const j=await r.json().catch(()=>({}));
+    if(j.ok && Array.isArray(j.params)){
+      const entry=j.params.find(p=>p.name===name);
+      if(paramValueMatches(entry, expected)){
+        renderParamsTable(j);
+        return true;
+      }
+    }
+    await new Promise(res=>setTimeout(res, 50));
+  }
+  await refreshParams();
+  return false;
+}
+
+function renderParamsTable(j){
+  const tb=document.querySelector('#paramTable tbody');
+  if(!tb) return;
+  if(!j.ok){tb.innerHTML='<tr><td colspan=4>'+(j.error||'params error')+'</td></tr>';return;}
+  const tuneMode=resolveTuneMode(j);
+  syncTuneVerticalLayout(tuneMode);
+  const dryParamName=modeParamPrefix(tuneMode)+'dry_run';
+  const isDry=Array.isArray(j.params) && j.params.some(p=>p.name===dryParamName && !!p.value);
+  setDryRunPill(!!isDry);
+  const editing=tb.querySelector('input:focus, input:active');
+  const editName=editing&&editing.dataset?editing.dataset.pname:null;
+  tb.innerHTML='';
+  const plist=Array.isArray(j.params)?j.params.slice():[];
+  plist.sort((a,b)=>{
+    const ba=(a.type==='bool')?0:1;
+    const bb=(b.type==='bool')?0:1;
+    if(ba!==bb) return ba-bb;
+    return String(a.name||'').localeCompare(String(b.name||''));
+  });
+  const prefixEl=document.getElementById('paramPrefixLabel');
+  const pfx=modeParamPrefix(tuneMode);
+  if(prefixEl) prefixEl.textContent=pfx?pfx.slice(0,-1):'';
+  const orderByMeta=isTopCamMode(tuneMode);
+  if(orderByMeta){
+    plist.sort((a,b)=>{
+      const ma=getParamUiMeta(a.name,tuneMode);
+      const mb=getParamUiMeta(b.name,tuneMode);
+      if(ma.order!==mb.order) return ma.order-mb.order;
+      return String(a.name||'').localeCompare(String(b.name||''));
+    });
+  }
+  for(const p of plist){
+    const meta=getParamUiMeta(p.name, tuneMode);
+    const shortName=(pfx&&p.name.startsWith(pfx))?p.name.slice(pfx.length):p.name;
+    const tr=document.createElement('tr');
+    if(meta.focus) tr.classList.add('paramRowFocus');
+    const nameHtml='<div class="paramName">'+shortName+'</div>';
+    if(p.type==='double'){
+      const unit=getParamUnitInfo(p.name);
+      const dispMin=unit.toDisplay(p.min);
+      const dispMax=unit.toDisplay(p.max);
+      const dispStep=pickDisplayStep(unit, p.step);
+      const dispVal=unit.toDisplay(p.value);
+      const inpId='n_'+encodeURIComponent(p.name).replace(/%/g,'_');
+      const hintId='h_'+encodeURIComponent(p.name).replace(/%/g,'_');
+      const unitSuffix=unit.displayUnit?'<span class="paramDispUnit">'+unit.displayUnit+'</span>':'';
+      tr.innerHTML='<td class="pname">'+nameHtml+'</td>'
+        +'<td><input type="number" step="'+dispStep+'" data-pname="'+p.name+'" id="'+inpId+'">'+unitSuffix
+        +(unit.kind!=='plain'?'<div class="paramUnitHint" id="'+hintId+'"></div>':'')
+        +'</td>'
+        +'<td><input type="range" min="0" max="1" step="any" data-pname="'+p.name+'"></td>'
+        +'<td><button type="button">Apply</button></td>';
+      tb.appendChild(tr);
+      const inp=tr.querySelector('input[type=number]');
+      const rng=tr.querySelector('input[type=range]');
+      const btn=tr.querySelector('button');
+      const hintEl=unit.kind!=='plain'?document.getElementById(hintId):null;
+      inp.value=String(dispVal);
+      const updateHint=(dispV)=>{
+        if(!hintEl) return;
+        const radV=unit.fromDisplay(dispV);
+        hintEl.innerHTML='<code>'+unit.fmtRad(radV)+'</code>';
+      };
+      bindSliderNumber(p.name,inp,rng,dispMin,dispMax,dispStep,updateHint);
+      if(editName===p.name){inp.focus();}
+      btn.onclick=async()=>{
+        document.getElementById('paramMsg').textContent='';
+        let dv=parseFloat(inp.value);
+        if(!isFinite(dv)) return;
+        dv=Math.max(dispMin,Math.min(dispMax,dv));
+        const v=unit.fromDisplay(dv);
+        const res=await postParam(p.name,v);
+        if(!res.ok) document.getElementById('paramMsg').textContent='Set failed: '+(res.j.error||res.j.reason||res.status);
+        else if(Array.isArray(res.j.params)) renderParamsTable(res.j);
+        else await refreshParamsAfterApply(p.name, v);
+      };
+    }else if(p.type==='bool'){
+      tr.innerHTML='<td class="pname">'+nameHtml+'</td><td colspan="2"><label><input type="checkbox" data-pname="'+p.name+'" '+(p.value?'checked':'')+'> enabled</label></td><td><button type="button">Apply</button></td>';
+      tb.appendChild(tr);
+      const cb=tr.querySelector('input[type=checkbox]');
+      const btn=tr.querySelector('button');
+      const dryForMode=modeParamPrefix(tuneMode)+'dry_run';
+      btn.onclick=async()=>{
+        document.getElementById('paramMsg').textContent='';
+        const res=await postParam(p.name,cb.checked);
+        if(!res.ok) document.getElementById('paramMsg').textContent='Set failed: '+(res.j.error||res.j.reason||res.status);
+        else{
+          if(Array.isArray(res.j.params)) renderParamsTable(res.j);
+          else await refreshParamsAfterApply(p.name, cb.checked);
+          if(p.name===dryForMode) setDryRunPill(!!cb.checked);
+        }
+      };
+    }else{
+      tr.innerHTML='<td class="pname">'+nameHtml+'</td><td colspan="3">'+JSON.stringify(p.value)+'</td>';
+      tb.appendChild(tr);
+    }
+  }
+}
+
+async function refreshParams(){
+  const tb=document.querySelector('#paramTable tbody');
+  if(!tb) return;
+  try{
+    const r=await fetch('/api/params.json',{cache:'no-store'});
+    const j=await r.json();
+    renderParamsTable(j);
+  }catch(e){
+    tb.innerHTML='<tr><td colspan="4">fetch error</td></tr>';
+  }
+}
+
+async function downloadSavedParamsFile(filename){
+  const r=await fetch('/api/params/save/download?file='+encodeURIComponent(filename),{cache:'no-store'});
+  if(!r.ok){
+    throw new Error('download failed: '+r.status);
+  }
+  const blob=await r.blob();
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function saveParamsToFile(){
+  const msgEl=document.getElementById('paramMsg');
+  if(msgEl) msgEl.textContent='Saving...';
+  try{
+    const r=await fetch('/api/params/save',{method:'POST'});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j.ok){
+      if(msgEl) msgEl.textContent='Save failed: '+(j.error||r.status);
+      return;
+    }
+    if(j.filename){
+      await downloadSavedParamsFile(j.filename);
+    }
+    if(msgEl) msgEl.textContent='Saved: '+(j.filename||j.path||'ok');
+  }catch(e){
+    if(msgEl) msgEl.textContent='Save failed: '+(e.message||'network error');
+  }
+}
+
+function openParamModal(){
+  const m=document.getElementById('paramModal');
+  if(!m) return;
+  m.classList.add('open');
+  m.setAttribute('aria-hidden','false');
+  refreshParams();
+}
+function closeParamModal(){
+  const m=document.getElementById('paramModal');
+  if(!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden','true');
+}
+
+function paramPanelInit(){
+  const b=document.getElementById('btnRefreshParams');
+  if(b) b.onclick=()=>refreshParams();
+  const saveBtn=document.getElementById('btnSaveParams');
+  if(saveBtn) saveBtn.onclick=(ev)=>{ ev.preventDefault(); saveParamsToFile(); };
+  const fab=document.getElementById('btnParamFab');
+  if(fab){
+    fab.onclick=(ev)=>{ ev.preventDefault(); openParamModal(); };
+  }
+  const bd=document.getElementById('paramModalBackdrop');
+  if(bd) bd.onclick=()=>closeParamModal();
+  const x=document.getElementById('btnCloseParamModal');
+  if(x){
+    x.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); closeParamModal(); };
+  }
+  document.addEventListener('keydown',(ev)=>{
+    if(ev.key!=='Escape') return;
+    const m=document.getElementById('paramModal');
+    if(m&&m.classList.contains('open')) closeParamModal();
+  });
+  const vf=document.getElementById('btnApplyVideoMaxFps');
+  if(vf){
+    vf.onclick=(ev)=>{
+      ev.preventDefault();
+      applyVideoMaxFpsFromToolbar();
+    };
+  }
+}
+
+splitPaneInit();
+paramPanelInit();
+initPlotTimeScrubber();
+initPlotHover();
+setDebugVideoActive(true);
+startTuneTimers();
+</script>
+</body></html>

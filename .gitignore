@@ -1,0 +1,43 @@
+# Build outputs
+build/*
+adapters/bf/build/*
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# Extracted BF build tree
+src/circle_pilot/adapters/bf/build/
+src/circle_pilot/adapters/bf/compile_commands.json
+src/circle_pilot/compile_commands.json
+
+# Runtime logs and debug captures
+logs_ws/
+log/
+log_ros2/
+debug_frames/
+*.log
+
+# Core package generated artifacts copied from source workspaces
+src/circle_pilot/core/build/
+src/circle_pilot/core/build_standalone/
+src/circle_pilot/core/install/
+src/circle_pilot/core/log/
+
+# Local/editor/cache files
+.cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.DS_Store
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*.bak
+*.orig

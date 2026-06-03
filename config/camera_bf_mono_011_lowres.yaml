@@ -1,0 +1,21 @@
+# Profile C only — dexcin 009 top camera lowres (no ROS parameters).
+device: /dev/video0
+capture_width: 1280
+capture_height: 1024
+framerate: 180
+pixel_format: mjpeg
+output_width: 640
+output_height: 512
+io_method: mmap
+contrast: 70
+sharpness: 50
+# 关白平衡自动：auto 模式逐帧调色温会让目标外观漂移；固定色温更稳，且不影响亮度/SNR。
+auto_white_balance: auto
+white_balance: 4000
+# 自动曝光保持开启：实测固定 exposure=20(2ms) 太暗，SNR 下降导致模型置信普遍掉到
+# 0.267 量化档甚至 raw=0，活跃期 valid 从 AE 开启时的 ~98% 跌到 ~55%。AE 在稳态表现
+# 很好，启动收敛期的 raw=0 已由 bf_flight 的检测滑行(detection_coast_s)兜底。
+# 若日后要锁曝光以彻底消除收敛期，需先实测 AE 收敛后的曝光值再据此设 exposure，不要用 20。
+autoexposure: true
+exposure: 20
+autofocus: false

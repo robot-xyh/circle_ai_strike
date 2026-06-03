@@ -1,0 +1,3 @@
+deployment:
+  fc_backend: px4   # px4 | betaflight
+  profile: real     # sim | real

@@ -1,0 +1,475 @@
+# Profile C: Betaflight flight process config.
+# Bf body frame: FLU (forward, left, up). different from PX4 body frame: FRD (forward, right, down).
+# 注意事项：
+# 1. 首飞betaflight之前，需要先标定油门杆量
+# -----------------------------------------------------------------------------
+# 说明：每个参数后均附「一句话含义」内联注释。详细调参理由保留在参数上方的注释块。
+# 与 SITL gz_target_strike_top_cam_high_speed.yaml 的对齐情况见块注释；BF 因无
+# 位置/高度/速度反馈，evaluation / speed_governor / waiting_altitude 等为合理缺省（N/A）。
+# 复用共享 BF 运行时配置（MSP/相机/感知/看门狗/油门交接/RC 映射）。
+# 共享块见 config/bf_flight_common.yaml；如需覆盖，在文件内写内联 `bf_flight:` map。
+bf_flight_config: config/bf_flight_common.yaml
+
+strike:
+  target_class_name: UAV            # 跟踪目标类别名（YOLO 标签）
+  target_class_names: ["UAV"]       # 可接受目标类别列表（与 SITL 对齐，多类时用）
+  # NMS 之后的二级 filter 阈值，是检测被接受的「有效门限」。
+  # 模型 INT8 分数量化很粗（离散档 …0.267 / 0.500 / 0.623…），某些姿态真目标只落在
+  # 0.267 档。设为 0.25 把这一档（log 中 area 3万+ 的大目标却被 REJ:score）收回，
+  # 显著减少「某些位置检不出」。conf_threshold=0.20 让其先过 NMS，两者留间距避免边界跳变。
+  # 实测真目标命中时 score 多为 0.69~0.83，但压缩 INT8 在某些姿态会量化到 0.267/0.5
+  # 低档。0.45 会把 0.267 档真帧丢掉，加剧「某些位置检不出」。压到 0.30 召回这些帧；
+  # 极小幽灵框（log 中 score 0.237 / area 31px²）由 min_bbox_area=120 兜底滤除，故低风险。
+  min_score: 0.30                   # 检测被接受的最低置信度（二级复核门限）
+  # 远距真目标只有 ~13×17px≈200px²（log 显示 score 0.6~0.7 却被 area 砍掉、best=-1）。
+  # 这里压到 120：保留远距目标，同时仍能滤掉 <11px 的极小框。幽灵框靠 score 复核兜底。
+  min_bbox_area: 100.0              # 最小框面积（px²），低于则当噪声滤除
+  max_bbox_aspect_ratio: 5.0        # 最大宽高比，超过则当细长误检滤除
+  # 时序门控（方案1a）：防止真目标缺帧时，远处突现的小幽灵框抢成 best 导致目标位置跳。
+  #  - 离上一帧目标 <gate_radius_px 的候选视为「在跟」，正常按面积选；
+  #  - 离得远的候选只有面积 ≥ reacquire_area_ratio×上一帧目标面积 才允许接管（真目标移远/重现）；
+  #    否则判为幽灵框不选（best=-1），交由控制器滑行兜住。
+  temporal_gating:                  # 时序门控（统一主 key，不再平铺）
+    enabled: false                   # 启用时序门控（抑制远处幽灵框抢占 best）
+    # 160→220：检测间隙后目标相对位移可 >160px（log 中一帧 cy 跳 ~196px），
+    # 太紧会把快速移动的真目标重检判为「出轨」而误拒。放宽减少这类误丢。
+    gate_radius_px: 220.0           # 门控半径（px）：候选离上帧目标多近算「在跟」
+    reacquire_area_ratio: 0.4       # 远处候选接管所需的面积比（×上帧目标面积）
+  detection_stale_s: 0.25            # 检测时间戳超过此秒数即判过期，退出 Tracking
+  lost_timeout_s: 1.0               # 更长的丢失窗口（≥ detection_stale_s）
+  dkf_enable: true                  # 启用延迟像素卡尔曼（控制器实际读取的总开关）
+  dkf:                              # 延迟像素卡尔曼滤波（DKF）参数组
+    enable: true                    # （子段开关；总开关以上方 dkf_enable 为准）
+    process_accel_noise: 4.0        # 过程加速度噪声（越大越信测量、越跟手）
+    meas_noise_px: 4.0              # 测量噪声（px，越大越信预测、越平滑）
+    predict_extra_delay_s: 0.03     # 预测额外提前补偿的延迟（s）
+    max_cov_trace: 0.25             # 协方差迹上限，超过则认为预测不可信
+  # Image ex/ey -> rate cmd. Roll: PX4/BF both +rate = roll right -> same sign.
+  # Pitch rate: PX4 + = nose up; BF + = nose down (opposite). PX4 uses -1.0 for top cam;
+  # BF needs +1.0 for the same physical pitch correction. Level/ForceLevel use
+  # -level_kp * vehicle.pitch_rad and need no sign change (BF pitch angle is also inverted).
+  lateral_output_sign: 1.0          # 横向(roll)输出符号（与 PX4 同向）
+  longitudinal_output_sign: 1.0     # 纵向(pitch)输出符号（BF +=低头，与 PX4 -1.0 相反）
+  # 降猛烈/振荡：实测 OVERRIDE 下 roll_sp 甩到 ±1.9rad/s、chR 1017↔1953 几乎满舵。
+  # P 增益从 3.0→1.8，误差→杆量更温和（PX4 用 5.2 但配齐了 lead/smoothing/deadband_priority
+  # 等阻尼，BF 这些都关，故不能照搬高增益）。
+  # 跟不上修正：对照同机 PX4 运行良好的配置（kp 6.0/6.2, Kd 1.65/1.75, Kd/Kp≈0.28）。
+  # BF 之前 kp 减半且 Kd 仅 ~1/5（Kd/Kp=0.117）→ 又迟钝又欠阻尼，追不上还过冲出框。
+  # kp 回到 4.0（仍低于 PX4 6.0，因 BF 无内环 lead/smoothing 阻尼），Kd 同步抬到
+  # 0.28·Kp≈1.12 恢复近临界阻尼（PX4 设计：近距必须 Kd≈0.28·Kp 防过冲出框）。
+  lateral_kp_rate: 3.0              # 横向 P 增益：归一化 x 像素误差 → roll 角速度
+  lateral_kd_rate: 0.68             # 横向 D 增益：x 像素速度 → roll 角速度（阻尼）
+  # pitch 跟踪偏弱、目标易竖直出框：纵向 P 提到 5.0（高于 roll），Kd 同步到 0.28·Kp≈1.4
+  # 保持近临界阻尼。纵向运动通常比横向快，故让 pitch 轴权限/响应都强于 roll。
+  longitudinal_kp_rate: 3.0         # 纵向 P 增益：归一化 y 像素误差 → pitch 角速度
+  longitudinal_kd_rate: 0.68        # 纵向 D 增益：y 像素速度 → pitch 角速度（阻尼）
+  x_deadband: 0.020                 # 横向归一化死区（x_deadband_px>0 时不用此项）
+  y_deadband: 0.020                 # 纵向归一化死区（y_deadband_px>0 时不用此项）
+  # 36→20：36px 死区过大（PX4 用 12），目标在中心附近不修正也会慢慢漂出视野。
+  x_deadband_px: 12.0               # 横向像素死区：中心 ±此值内不修正
+  # 竖直方向更早开始修正，避免目标在死区内慢慢漂到上/下边缘（PX4 用 12）。
+  y_deadband_px: 12.0               # 纵向像素死区：中心 ±此值内不修正
+  aim_offset_x_px: 0.0              # 期望瞄准点相对光心的 x 偏移（px）
+  aim_offset_y_px: 0.0              # 期望瞄准点相对光心的 y 偏移（px）
+  # 0.25→0.08：D 项延迟太大几乎失效（PX4 用 0.055），缩短让微分阻尼真正起作用。
+  pixel_dot_lpf_tau_s: 0.15         # 像素误差微分(ex_dot/ey_dot)的一阶 LPF 时间常数（s）
+  rate_lpf_tau_s: 0.092              # 输出角速度设定值的一阶 LPF 时间常数（s）
+  # 20→80：之前 20 太低（PX4 用 125），角速度指令爬升太慢跟不上移动目标。抬到 80
+  # 兼顾跟手与平滑（仍低于 PX4 125，因 BF 无内环 lead/smoothing 阻尼）。
+  max_jerk_rad_s2: 80.0             # 角加速度（jerk）上限，抑制 rate 台阶（rad/s²）
+  # 1.5→2.5：之前撞 2.0 饱和是低 jerk+低阻尼导致的 runaway，不是 cap 本身太高。
+  # 恢复 Kd/jerk 后把上限抬到 2.5（143 deg/s）给足追上目标的权限（这是算法输出上限，
+  # 与下方 rc.max_*_rate（物理杆映射）是两回事）。PX4 用 4.0；BF 无内环阻尼故折中。
+  # 2.5 rad/s = 143.2 deg/s
+  max_roll_rate_rad_s: 2.5          # 算法输出 roll 角速度上限（rad/s，143°/s）
+  # pitch_sp 在日志里多次顶满 2.5（饱和）仍追不上 → 给纵向更高权限到 3.5（≈200 deg/s）
+  # 让 pitch 能真正把竖直方向漂出的目标拉回来。3.5 rad/s = 200.5 deg/s
+  max_pitch_rate_rad_s: 3.5         # 算法输出 pitch 角速度上限（rad/s，200°/s）
+  # WaitingTarget: level-P on roll/pitch attitude → rate cmd. ForceLevel ignores this.
+  waiting:                          # 无有效目标时的水平保持（WaitingTarget 分支）
+    level_hold_enabled: false       # 是否在等待时主动拉平姿态（false=不主动拉平）
+    level_kp: 1.5                   # 等待拉平比例增益（角速度 ← 姿态误差）
+    level_deadband_rad: 0.0087      # 等待拉平死区（rad，0.5°，不跟 IMU 噪声较劲）
+  force_level:                      # 倾角超硬包络时的强制拉平（ForceLevel 分支）
+    hard_level_kp: 1.5              # 强制拉平比例增益（rate = -kp·当前姿态）
+    min_hold_ms: 200               # 进入 ForceLevel 后最短保持时间（ms，防抖）
+  tilt_cap:                         # 倾角软/硬包络（防翻）
+    # 70°
+    max_roll_angle_rad: 1.2217304763960306   # roll 名义包络上界（rad，70°）
+    # 70°
+    max_pitch_angle_rad: 1.2217304763960306  # pitch 名义包络上界（rad，70°）
+    # 软限幅过渡带：之前缺省=0.15，与 SITL 的 tilt_softcap_band_rad=0.20 对齐。
+    softcap_band_rad: 0.20          # 软限幅渐缩带宽（rad，接近上界时削弱增大倾角的指令）
+    hardcap_margin_rad: 0.10        # 硬包络余量（rad，5.7°，超过即进 ForceLevel）
+  thrust:                           # 推力/油门标量（FLU）
+    # 倾斜推力补偿：倾斜时按 1/cos(tilt) 放大推力维持垂直分量，与 SITL
+    # gz_target_strike_top_cam_high_speed.yaml 的 target_strike.enable_tilt_compensation:true
+    # 对齐（core 默认 false，BF 之前未写=关闭，属行为不对齐）。
+    enable_tilt_compensation: true  # 是否按 1/cos(tilt) 放大推力补偿垂直分量
+    # [油门杆量] 算法悬停油门档，归一化 [0,1]=杆位分数（0→1000PWM, 0.5→1500, 1.0→2000）。
+    # Waiting/ForceLevel 用它。当前 0.283→1283PWM（疑似未标定，首飞前需台架核实）。
+    hover_scalar: 0.283             # [油门] 悬停油门档（Waiting/ForceLevel 基准，0~1）
+    # [油门杆量] Tracking PD 目标油门档，同样是 [0,1] 杆位分数。0.5→1500PWM。
+    constant_scalar: 0.5            # [油门] Tracking PD 目标油门档（0~1）
+    # 之前缺省值（ramp 0.25 / slew 0）与 SITL 不一致：
+    #  - tracking_ramp_tau_s：进入 Tracking 后 T_set 一阶逼近 T_tgt 的时间常数，对齐 SITL 0.35。
+    #  - slew_rate_scalar_s：最终 publish 推力斜率限制；之前缺省 0=无限制→推力可突跳。
+    #    对齐 SITL 1.0（每秒最多变化 1.0 个标量），消除各阶段切换时的油门台阶。
+    tracking_ramp_tau_s: 0.35       # 进入 Tracking 后油门逼近目标档的时间常数（s）
+    slew_rate_scalar_s: 1.0         # 最终油门斜率限制（每秒最大变化量，防突跳）
+    tilt_cos_floor: 0.5             # 倾角补偿分母 cos 乘积下限（防除零发散）
+    scalar_min: 0.01                # 油门标量输出下限（core 统一硬钳位，0~1）
+    scalar_max: 0.99                # 油门标量输出上限（core 统一硬钳位，0~1）
+  # ----- Tilt Guard（相机倾斜保护）-----
+  # 限制相机光轴与天顶的夹角，保持目标在相机视野中（背景为天空）
+  tilt_guard:                       # 相机倾斜保护（保持目标在视野/背景为天空）
+    enable: false                   # 是否启用倾斜保护（BF 暂关）
+    # 最大允许倾斜角度（弧度），0.785 rad = 45°
+    max_tilt_rad: 0.785             # 允许的最大光轴-天顶夹角（rad，45°）
+    # 恢复比例增益，当倾斜超限时拉回
+    recovery_kp: 0.8               # 超限时拉回的比例增益
+  # ----- Directional Dive（方向性俯冲）-----
+  # 极近距离时向目标方向俯冲，提高命中率
+  directional_dive:                 # 极近距离方向性俯冲（提高命中率）
+    enable: false                    # 是否启用方向性俯冲
+    # 开始俯冲的 bbox_ratio 阈值（5% 开始，仅近距离激活）
+    start_edge_ratio: 0.05          # 开始俯冲的 bbox 面积比阈值
+    # 完全激活俯冲的 bbox_ratio 阈值（10% 完全激活）
+    end_edge_ratio: 0.10            # 完全激活俯冲的 bbox 面积比阈值
+    dive_roll_gain: 1.1             # 俯冲 roll 增益（向目标方向滚转）
+    dive_pitch_gain: 0.8            # 俯冲 pitch 增益（向目标方向俯仰）
+    # [油门杆量] 目标在上方时的爬升油门档，[0,1] 杆位分数。0.45→1450PWM。
+    climb_thrust: 0.45              # [油门] 目标在上方时的爬升油门档（0~1）
+    # [油门杆量] 目标在下方时的下降油门档。0.38→1380PWM。
+    descend_thrust: 0.38            # [油门] 目标在下方时的下降油门档（0~1）
+    # [油门杆量] 巡航油门档（目标在水平方向）。0.4→1400PWM。
+    cruise_thrust: 0.4             # [油门] 目标在水平方向时的巡航油门档（0~1）
+    lead_time_s: 0.10              # 俯冲预测提前时间（s）
+    detection_max_age_s: 0.30      # 检测最大年龄（s），超过则禁用俯冲
+    min_horizontal_boost: 3.0      # 目标在上方但偏心时的最小水平增益放大
+    tilt_comp_threshold: 0.015     # 倾斜补偿阈值（cos(tilt) 低于此值时补偿）
+    tilt_comp_gain: 0.5            # 倾斜补偿增益
+  # ===== 中段跟踪：与 SITL high_speed 对齐（修复「远距只爬升不前进」）=====
+  # 以下整块之前在 BF YAML 缺失，core 结构体默认值导致 BF 行为与仿真不一致：
+  #   1) rho_scale 缺省 scale_far=0.35 → 远/小目标 rate 上限被砍到 35%
+  #      （日志实测 pitch_sp 恒为 1.225 = max_pitch_rate 3.5 × 0.35），横向修正乏力；
+  #   2) preclimb.xy_gate 缺省关闭 → 没有「xy 未对正前先别爬升」的门控，一接管就猛爬；
+  #   3) tracking_deadband_priority / ascent_damping 缺省关闭 → 误差/像速大时不抑制爬升油门。
+  # 三者叠加正是「远距离主要在爬升、不向水平前进」的根因。
+
+  # 距离自适应 rho_scale：远/小目标恢复满 rate 权限（与 SITL 一致，关闭 0.35 限速）。
+  rho_scale:                        # 由框面积推导距离，缩放 rate/死区
+    # SITL desired=800；BF 远距真目标 area≈200~300px²，ratio 仍偏小，保持 800 基准。
+    desired_bbox_area_px: 800.0     # 期望距离上的参考框面积（px²，使 e_rho≈0）
+    scale_near: 1.0                 # 近距饱和区的 rate 缩放（1.0=不缩）
+    scale_far: 1.0                  # 远距饱和区的 rate 缩放（1.0=满权限，原缺省 0.35）
+    near_ratio: 2.01                # 近阈值 ratio=面积/desired（须 >1）
+    far_ratio: 0.50                 # 远阈值 ratio（须在 0~1）
+  # Approach drive：远距给适度低头偏置驱动水平逼近，避免平飞丢目标。
+  # ⚠ 符号：BF longitudinal_output_sign=+1.0（pitch + = 低头，与 PX4 -1.0 相反），
+  #    故 pitch_output_sign 取 +1.0 才能产生与 SITL 相同的物理低头。首飞需观察方向。
+  approach_drive:                   # 远距低头偏置（驱动水平逼近，防平飞丢目标）
+    enable: true                    # 是否启用 approach drive
+    e_rho_deadband: 0.05            # e_rho 死区（此范围内不加低头偏置）
+    pitch_rate_gain: 0.35           # e_rho → 低头角速度增益
+    pitch_rate_max_rad_s: 0.45      # 低头偏置角速度上限（rad/s）
+    pitch_output_sign: 1.0          # 低头偏置符号（BF 取 +1.0，首飞核实方向）
+  # 图像前瞻：高速相对运动时用 ex/ey + 速度*lead 提前瞄准（SITL image_lead_*）。
+  image_lead:                       # 图像前瞻瞄准（高速相对运动提前量）
+    enable: true                    # 是否启用图像前瞻
+    time_s: 0.16                    # 前瞻时间（s）：瞄准 ex+ex_dot*time
+    max_px: 160.0                   # 前瞻位移上限（px，防过冲）
+  # 进入 Tracking 初期的增益/前瞻渐入，抑制刚接管时的台阶（SITL tracking_start_smoothing_*）。
+  tracking_start_smoothing:         # 进入 Tracking 初期的增益渐入（抑制接管台阶）
+    enable: true                    # 是否启用初期渐入
+    smoothing_s: 0.30               # 渐入时长（s）
+    kp_scale_initial: 0.85          # 初始 Kp 缩放（渐升到 1.0）
+    lead_scale_initial: 0.70        # 初始前瞻缩放（渐升到 1.0）
+    kd_scale_initial: 0.70          # 初始 Kd 缩放（渐升到 1.0）
+  # ----- Preclimb xy 门控（核心：xy 未对正/未稳前抑制「悬停以上」的爬升油门）-----
+  # 图像域门限（px / px·s⁻¹ / rad）直接照搬 SITL；thrust 标量按 BF 油门带换算：
+  #   BF [hover 0.283, constant 0.5]，带宽 0.217；PX4 [hover 0.72, constant 0.76]，带宽 0.04。
+  #   SITL preclimb_min_thrust_scalar 0.730 落在 PX4 带 25% → BF 0.283+0.25*0.217≈0.337（→1337PWM）。
+  #   ⚠ 取决于 hover_scalar=0.283 是否为真实悬停档，首飞前台架复核。
+  preclimb:                         # 预爬升 xy 门控：xy 未对正前抑制爬升油门
+    xy_gate_enable: true            # 是否启用 xy 门控（核心开关）
+    xy_error_gate_x_px: 220.0       # 释放门所需的 x 像素误差上限
+    xy_error_gate_y_px: 190.0       # 释放门所需的 y 像素误差上限
+    xy_rate_gate_x_px_s: 300.0      # 释放门所需的 x 像素速度上限（px/s）
+    xy_rate_gate_y_px_s: 360.0      # 释放门所需的 y 像素速度上限（px/s）
+    clear_margin_x_px: 80.0         # 释放门所需框距左右边缘的最小余量（px）
+    clear_margin_y_px: 60.0         # 释放门所需框距上下边缘的最小余量（px）
+    # 与 SITL 一致：不强制 level 门，仅靠 xy + safe-hold 约束。
+    level_gate_enable: false        # 是否要求姿态接近水平才释放门（false=不强制）
+    level_max_roll_rad: 0.22        # level 门的最大 roll（rad，启用时生效）
+    level_max_pitch_rad: 0.24       # level 门的最大 pitch（rad，启用时生效）
+    xy_hold_s: 0.10                 # 满足门限需持续多久才释放（s）
+    level_assist_enable: true       # 是否在接近倾角限时辅助拉平
+    level_assist_band_rad: 0.08     # 辅助拉平的过渡带宽（rad）
+    level_assist_kp: 1.2            # 辅助拉平比例增益
+    level_assist_max_rad_s: 0.30    # 辅助拉平角速度上限（rad/s）
+    safe_hold_enable: false         # 输入不可靠/大倾角时是否混向拉平（BF 暂关）
+    safe_hold_level_kp: 1.2         # safe-hold 拉平比例增益
+    safe_hold_level_max_rad_s: 0.30 # safe-hold 拉平角速度上限（rad/s）
+    safe_hold_image_rate_scale: 1.0 # safe-hold 时图像 rate 缩放
+    safe_hold_max_rate_rad_s: 1.40  # safe-hold 时输出 rate 上限（rad/s）
+    safe_hold_tilt_start_rad: 0.16  # safe-hold 倾角混合起始（rad）
+    safe_hold_tilt_full_rad: 0.32   # safe-hold 倾角完全混合（rad）
+    # 门控保持期：仅放行 18% 的「悬停以上」爬升油门，其余压回悬停。
+    thrust_excess_scale: 0.80       # 门控期放行的「悬停以上」爬升油门比例
+    # [油门杆量] ⚠ 门控期最低油门档，略高于 hover 0.283。SITL 0.730→BF 0.337（台架复核）。
+    min_thrust_scalar: 0.4        # [油门] 门控期最低油门档（略高于 hover，0~1）
+    thrust_hard_cap_enable: true    # 门控期是否硬钳推力（防倾斜补偿放大爬升）
+    # 释放后首段慢爬（SITL 该项关闭，保持关闭）。
+    release_slowdown_enable: false  # 释放门后是否首段慢爬（SITL 关闭，保持关）
+    release_slowdown_s: 4.0         # 释放后慢爬时长（s，启用时生效）
+    release_thrust_excess_scale: 0.25  # 释放慢爬期放行的爬升油门比例
+    release_min_thrust_scalar: 0.326   # [油门] 释放慢爬期最低油门档（0~1）
+    release_thrust_hard_cap_enable: true  # 释放慢爬期是否硬钳推力
+  # 释放门后随距离逼近像速飙升时，只压爬升余量给 x/y 视觉伺服收敛时间（SITL ascent_image_velocity_damping_*）。
+  ascent_damping:                   # 爬升像速阻尼：像速高时只压爬升余量
+    image_velocity_damping_enable: true       # 是否启用像速阻尼
+    image_velocity_damping_start_px_s: 180.0  # 像速超此值开始压爬升（px/s）
+    image_velocity_damping_min_scale: 0.55    # 压到的最小爬升余量比例
+  # 死区优先：xy 误差/像速大时优先保横向对正，只削减「悬停以上」的爬升油门（SITL tracking_deadband_priority_*）。
+  tracking_deadband_priority:       # 死区优先：误差大时削减爬升油门保 xy 对正
+    enable: true                    # 是否启用死区优先
+    error_start_scale: 1.0          # 误差≥死区×此值开始削减（相对死区倍数）
+    error_full_scale: 4.0           # 误差≥死区×此值完全削减
+    rate_start_px_s: 180.0          # 像速超此值开始削减（px/s）
+    rate_full_px_s: 520.0           # 像速超此值完全削减（px/s）
+    min_excess_scale: 0.35          # 削减到的最小爬升余量比例
+    hard_cap_enable: true           # 是否硬钳推力
+  # ----- 检测/置信兜底（之前缺失，用 core 默认；这里显式与 SITL 对齐）-----
+  tracker_fallback:                 # 检测短暂过期时改用 DKF 预测兜底
+    enable: true                    # 是否启用 tracker fallback
+    after_s: 0.12                   # 过期多久后开始用预测（s）
+    max_s: 0.45                     # 用预测的最长时间（s，超过则判丢失）
+    max_cov_trace: 0.30             # 预测协方差迹上限（超过不再兜底）
+    min_score: 0.50                 # 兜底所需的最低历史置信度
+  confidence:                       # 置信门：仅高置信时才进 FA/记录 commit
+    gate_enable: true               # 是否启用置信门
+    min_score: 0.50                 # 进 FA 所需最低置信度
+    max_cov_trace: 0.60             # 进 FA 所需的最大协方差迹
+  # ----- 偏航：SITL 顶相机锁航向（yaw_lock_enabled:true），BF 之前缺 yaw 段→默认未锁。-----
+  yaw:                              # 偏航控制
+    lock_enabled: true              # 是否锁航向（发布 yaw_rate=0，仅 roll/pitch 跟踪）
+    bearing_kp: 0.6                 # Tracking 时由 ex 推方位误差 → yaw_rate 增益
+    hold_gain: 0.5                  # Waiting 时保持丢失前航向的刚度
+    rate_min_rad_s: -0.7            # yaw 角速度下限（rad/s）
+    rate_max_rad_s: 0.7             # yaw 角速度上限（rad/s）
+    hold_deadband_rad: 0.0087       # 保持航向死区（rad，0.5°）
+    track_deadband_rad: 0.0524      # 跟踪航向死区（rad，3°）
+    rate_lpf_tau_s: 0.15            # yaw 角速度一阶 LPF 时间常数（s）
+  # ===== Final Approach（末端逼近/commit）：对齐 PX4 high_speed =====
+  # 与 gz_target_strike_top_cam_high_speed.yaml 的 target_strike.final_approach_* 全套对齐。
+  # 这些字段大多是图像域量（area_ratio / px / px·s⁻¹ / rad / 0~1 缩放），相机坐标系一致，
+  # 直接照搬。两处例外必须按 BF 油门口径换算（不可照抄）：
+  #   * commit.thrust_scalar 与 thrust.min_thrust_scalar 是「绝对油门标量」，在 controller
+  #     里与 thrust.hover_scalar 用在同一公式槽。
+  #   ⚠ 已知遗留：下方 thrust.min_thrust_scalar=0.077、commit.thrust_scalar=0.45 是按
+  #     旧油门带 [0.07,0.08] 推的，与现行 [hover 0.283, constant 0.5] 不自洽，首飞前需按
+  #     新带重算（min 应 ≈0.337、commit 应高于 constant 0.5），并台架复核。
+  # altitude_gate 保持关闭：BfStateSource 不填高度，FA 进入只能靠 area/stable/tilt 图像门。
+  # 注意：BF 无独立 FinalApproach 顶层状态——FA 是 Tracking 内子阶段，CommitHold/FaFallback
+  # 为独立状态，三者 has_valid_target 时都会下发算法指令（含上面换算后的 thrust_z）。
+  final_approach:                   # 末端逼近（FA）参数大组
+    gate:                           # FA 进入/退出门
+      boost_enable: true           # 是否启用 FA boost（注释 enable in fly）
+      area_ratio_enter: 0.0022      # 进入 FA 的框面积/画面比阈值
+      area_ratio_exit: 0.0017       # 退出 FA 的面积比阈值（迟滞）
+      # BF 无高度反馈，强制关闭高度门（PX4 本也为 false）。
+      altitude_gate_enable: false   # 高度门（BF 无高度，强制关）
+      altitude_gate_max_gap_m: 12.0 # 高度门最大高度差（m，启用时生效）
+      area_quality_gate_enable: true        # 面积质量门（误差/像速/倾角达标才进 FA）
+      area_quality_error_x_px: 120.0        # 面积质量门 x 误差上限（px）
+      area_quality_error_y_px: 140.0        # 面积质量门 y 误差上限（px）
+      area_quality_rate_x_px_s: 240.0       # 面积质量门 x 像速上限（px/s）
+      area_quality_rate_y_px_s: 300.0       # 面积质量门 y 像速上限（px/s）
+      area_quality_max_tilt_rad: 0.70       # 面积质量门最大倾角（rad）
+      tilt_gate_enable: false               # 倾角门（持续大倾角且误差稳时早进 FA）
+      tilt_gate_min_area_ratio: 0.0020      # 倾角门最小面积比
+      tilt_gate_start_rad: 0.26             # 倾角门起始倾角（rad）
+      tilt_gate_error_x_px: 55.0            # 倾角门 x 误差上限（px）
+      tilt_gate_error_y_px: 70.0            # 倾角门 y 误差上限（px）
+      tilt_gate_rate_x_px_s: 80.0           # 倾角门 x 像速上限（px/s）
+      tilt_gate_rate_y_px_s: 130.0          # 倾角门 y 像速上限（px/s）
+      stable_gate_enable: true              # 稳定门：小目标长时间居中即早进 FA
+      stable_gate_min_area_ratio: 0.00035   # 稳定门最小面积比
+      stable_gate_max_area_ratio: 0.0024    # 稳定门最大面积比
+      stable_gate_error_x_px: 60.0          # 稳定门 x 误差上限（px）
+      stable_gate_error_y_px: 75.0          # 稳定门 y 误差上限（px）
+      stable_gate_rate_x_px_s: 180.0        # 稳定门 x 像速上限（px/s）
+      stable_gate_rate_y_px_s: 240.0        # 稳定门 y 像速上限（px/s）
+      stable_gate_max_tilt_rad: 0.60        # 稳定门最大倾角（rad）
+      stable_gate_hold_s: 0.12              # 稳定门需持续时长（s）
+      hold_s: 6.00                          # 进入 FA 后的保持时长（s）
+    scaling:                        # FA 内增益/滤波缩放
+      jerk_scale: 1.0               # FA 内 jerk 缩放 可调整
+      roll_rate_scale: 1.0          # FA 内 roll 速率上限缩放 可调整
+      kp_scale: 1.35                # FA 内 Kp 缩放
+      kd_scale: 0.75                # FA 内 Kd 缩放
+      pixel_dot_lpf_scale: 0.75     # FA 内像素微分 LPF 缩放
+      rate_lpf_scale: 0.75          # FA 内 rate LPF 缩放
+      deadband_scale: 0.20          # FA 内死区缩放（0=取消死区）
+      kp_proximity_gain: 0.0        # 近距自适应 Kp 增量（×max(0,-e_rho)）
+      kd_proximity_gain: 0.0        # 近距自适应 Kd 增量
+      proximity_error_norm: true    # 是否对 PD 误差做近距归一化（×exp(min(0,e_rho))）
+      pitch_ff_erho_gain: 0.0       # 由 e_rho 闭合率前馈 pitch 的增益（0=关）
+    leveling:                       # FA 内随距离逐步拉平 roll/pitch
+      roll_level_start_ratio: 0.025 # roll 拉平起始面积比
+      roll_level_end_ratio: 0.075   # roll 拉平完全面积比
+      roll_level_kp: 1.2            # roll 拉平比例增益
+      roll_level_max_rad_s: 0.40    # roll 拉平角速度上限（rad/s）
+      pitch_level_start_ratio: 0.0010  # pitch 拉平起始面积比
+      pitch_level_end_ratio: 0.0040    # pitch 拉平完全面积比
+      pitch_level_kp: 2.0           # pitch 拉平比例增益
+      pitch_level_max_rad_s: 0.65   # pitch 拉平角速度上限（rad/s）
+    pitch_chatter_guard:            # 防 pitch 抖振（小目标近距）
+      enable: false                 # 是否启用 pitch 抖振保护
+      max_area_ratio: 0.0012        # 生效的最大面积比
+      max_error_y_px: 80.0          # 生效的最大 y 误差（px）
+      max_rate_y_px_s: 260.0        # 生效的最大 y 像速（px/s）
+      prev_min_rate_rad_s: 0.55     # 触发判定的上帧最小 rate（rad/s）
+      max_reversal_rate_rad_s: 0.55 # 允许的最大反向 rate（rad/s）
+    tilt_aim_comp:                  # 倾斜瞄准补偿（按 tan(姿态)·焦距 平移期望中心）
+      enable: true                  # 是否启用倾斜瞄准补偿（注释 enable in fly）
+      start_ratio: 0.006            # 补偿起始面积比
+      end_ratio: 0.025              # 补偿完全面积比
+      gain: 0.70                    # 补偿增益
+      max_px: 160.0                 # 补偿位移上限（px）
+      roll_sign: 0.0                # roll 轴补偿符号（0=不补偿）
+      pitch_sign: 1.0               # pitch 轴补偿符号
+    thrust:                         # FA 内推力调度（多重慢降，z 闭合）
+      tilt_slowdown_enable: true            # 大倾角时减慢 z 闭合（注释 enable in fly）
+      tilt_slowdown_start_rad: 0.45         # 倾角慢降起始（rad）
+      tilt_slowdown_end_rad: 0.70           # 倾角慢降完全（rad）
+      tilt_slowdown_min_scale: 0.55         # 倾角慢降到的最小爬升余量比例
+      vertical_drift_slowdown_enable: true  # 目标下滑时减慢 z 闭合
+      vertical_drift_start_px_s: 160.0      # 竖直漂移慢降起始像速（px/s）
+      vertical_drift_min_scale: 0.50        # 竖直漂移慢降最小比例
+      ascent_budget_enable: true            # 显式爬升预算（倾角/下漂/对正差时近悬停）
+      ascent_budget_tilt_start_rad: 0.32    # 爬升预算倾角起始（rad）
+      ascent_budget_tilt_full_rad: 0.60     # 爬升预算倾角完全（rad）
+      ascent_budget_y_rate_start_px_s: 180.0  # 爬升预算 y 像速起始（px/s）
+      ascent_budget_y_rate_full_px_s: 420.0   # 爬升预算 y 像速完全（px/s）
+      ascent_budget_y_error_start_px: 80.0    # 爬升预算 y 误差起始（px）
+      ascent_budget_y_error_full_px: 220.0    # 爬升预算 y 误差完全（px）
+      ascent_budget_min_excess_scale: 0.60    # 爬升预算最小余量比例
+      ascent_budget_hard_cap_enable: true     # 爬升预算是否硬钳推力
+      # [油门杆量] ⚠ FA 内最低油门档，旧带 [0.07,0.08] 推得，与现行带不自洽，需重算（应≈0.337）。
+      min_thrust_scalar: 0.3                 # [油门] FA 内最低油门档（0~1，⚠待重算）
+      min_thrust_budget_relax_enable: true    # 爬升预算激活时是否放松 min 油门
+      min_thrust_budget_relax_scale: 0.55     # 放松比例
+      thrust_taper_enable: true               # 末端按边缘/倾角渐降 z 闭合
+      thrust_taper_start_ratio: 0.035         # 渐降起始面积比
+      thrust_taper_end_ratio: 0.100           # 渐降完全面积比
+      thrust_taper_min_scale: 0.75            # 渐降最小比例
+      thrust_taper_area_enable: false         # 是否按面积渐降（近距框面积不可靠，关）
+      thrust_taper_edge_enable: true          # 是否按边缘接近度渐降
+      thrust_taper_edge_start_score: 0.15     # 边缘渐降起始分数
+      thrust_taper_edge_full_score: 1.0       # 边缘渐降完全分数
+      thrust_taper_tilt_enable: true          # 是否按倾角渐降
+      thrust_taper_tilt_start_rad: 0.38       # 倾角渐降起始（rad）
+      thrust_taper_tilt_full_rad: 0.70        # 倾角渐降完全（rad）
+      thrust_hard_cap_enable: false           # 是否硬钳推力（防倾斜补偿抵消慢降）
+      unaligned_slowdown_start_ratio: 0.010   # 未对正慢降起始面积比
+      unaligned_slowdown_end_ratio: 0.060     # 未对正慢降完全面积比
+      unaligned_thrust_excess_scale: 0.70     # 未对正时放行的爬升余量比例
+    edge_protect:                   # 末端边缘保护（框接近出画面时回拉）
+      enable: false                 # 是否启用边缘保护（注释 enable in fly）
+      margin_x_px: 220.0            # x 触发余量（框距边缘 <此值触发，px）
+      margin_y_px: 210.0            # y 触发余量（px）
+      predict_s: 0.40               # 边缘保护预测提前时间（s）
+      roll_kp_rate: 5.0             # 边缘回拉 roll 增益
+      # 边缘保护的 pitch 之前比 roll 弱（4.0<5.0）且 boost 仅钳到 0.90，目标贴上/下边时
+      # 拉不回来 → pitch_kp 提到 5.0 与 roll 对齐，boost 上限抬到 1.6 给足回拉权限。
+      pitch_kp_rate: 5.0            # 边缘回拉 pitch 增益
+      pitch_boost_max_rad_s: 1.6    # 边缘回拉 pitch 增量上限（rad/s）
+      thrust_scale: 0.75            # 边缘保护时的推力缩放
+    bottom_pitch_guard:             # 底边保护（目标下滑到下边缘时混向拉平）
+      enable: false                 # 是否启用底边 pitch 保护
+      margin_px: 120.0              # 触发的底边余量（px）
+      error_start_px: 70.0          # 混合起始 y 误差（px）
+      error_full_px: 140.0          # 混合完全 y 误差（px）
+      level_kp: 2.2                 # 拉平比例增益
+      max_rad_s: 0.75               # 拉平角速度上限（rad/s）
+    commit:                         # 末端 commit（短时保持最后有效撞击指令）
+      enable: true                  # 是否启用 commit（注释 enable in fly）
+      command_hold_s: 2.00          # commit 指令保持时长（s）
+      detection_stale_s: 1.20       # commit 期检测过期判定（s）
+      min_latch_s: 0.12             # 最短锁存时间（s，避免锁住过早快照）
+      # [油门杆量] ⚠ commit/末端撞击油门档，旧带推得需重算（应高于 constant 0.5）。
+      thrust_scalar: 0.55           # [油门] commit/撞击油门档（0~1，⚠待重算）
+      min_area_ratio: 0.0018        # commit 允许的最小面积比
+      terminal_min_area_ratio: 0.0018       # 末端就绪的最小面积比
+      terminal_max_error_x_px: 50.0         # 末端就绪 x 误差上限（px）
+      terminal_max_error_y_px: 65.0         # 末端就绪 y 误差上限（px）
+      stable_bypass_area_enable: true       # 稳定时是否绕过面积门
+      start_on_terminal_ready_enable: false # 末端就绪即启动 commit
+      recent_centered_handoff_enable: true  # 近期居中过则允许交接 commit
+      recent_centered_handoff_min_area_ratio: 0.0010   # 交接最小面积比
+      recent_centered_handoff_max_age_s: 2.50           # 交接快照最大年龄（s）
+      recent_centered_handoff_trigger_error_x_px: 85.0  # 交接触发 x 误差（px）
+      recent_centered_handoff_trigger_error_y_px: 90.0  # 交接触发 y 误差（px）
+      recent_centered_handoff_live_blend: 0.35          # 交接时实时检测混合比
+      recent_centered_hold_through_s: 0.00              # 交接后保持时长（s）
+      thrust_ramp_s: 0.25           # commit 推力斜升时长（s）
+      snapshot_max_area_ratio: 0.080        # 记录快照的最大面积比
+      align_gate_enable: true       # commit 前需视觉对正门
+      align_max_error_x_px: 60.0    # 对正门 x 误差上限（px）
+      align_max_error_y_px: 75.0    # 对正门 y 误差上限（px）
+      align_max_rate_x_px_s: 160.0  # 对正门 x 像速上限（px/s）
+      align_max_rate_y_px_s: 220.0  # 对正门 y 像速上限（px/s）
+      align_hold_s: 0.06            # 对正需持续时长（s）
+      tilt_gate_enable: false       # commit 倾角门
+      max_tilt_rad: 0.60            # commit 最大倾角（rad，启用时生效）
+      blind_commit_enable: false    # 盲 commit（目标真出画面时按边缘交接）
+      blind_commit_min_area_ratio: 0.0      # 盲 commit 最小面积比
+      blind_commit_edge_margin_x_px: 80.0   # 盲 commit x 边缘余量（px）
+      blind_commit_edge_margin_y_px: 80.0   # 盲 commit y 边缘余量（px）
+      blind_commit_edge_vertical_gate_enable: true   # 盲 commit 竖直边缘门
+      blind_commit_edge_horizontal_gate_enable: true # 盲 commit 水平边缘门
+      blind_commit_edge_max_error_x_px: 120.0  # 盲 commit x 误差上限（px）
+      blind_commit_edge_max_rate_x_px_s: 220.0 # 盲 commit x 像速上限（px/s）
+      blind_commit_edge_max_error_y_px: 160.0  # 盲 commit y 误差上限（px）
+      blind_commit_edge_max_rate_y_px_s: 360.0 # 盲 commit y 像速上限（px/s）
+      blind_commit_min_score: 0.60          # 盲 commit 最低置信度
+      blind_commit_trend_lead_s: 0.22       # 盲 commit 趋势前瞻（s）
+      blind_commit_trend_max_rate_rad_s: 0.90  # 盲 commit 趋势最大 rate（rad/s）
+      predictive_enable: true       # commit 期是否用预测指令（注释 enable in fly）
+      predict_lead_s: 0.30          # commit 预测提前时间（s）
+      predict_kp_rate: 3.0          # commit 预测 P 增益
+      predict_kd_rate: 0.25         # commit 预测 D 增益
+      predict_max_rate_rad_s: 1.00  # commit 预测角速度上限（rad/s）
+      predict_blend_s: 0.35         # commit 预测混合时长（s）
+      freeze_on_edge_protect: false # 边缘保护时是否冻结 commit
+      forward_pitch_rate_rad_s: 0.0 # commit 期附加前向 pitch 角速度（rad/s）
+      roll_level_kp: 1.2            # commit 期 roll 拉平增益
+      roll_level_max_rad_s: 0.45    # commit 期 roll 拉平上限（rad/s）
+      roll_level_blend: 0.10        # commit 期 roll 拉平混合比
+      pitch_level_kp: 2.0           # commit 期 pitch 拉平增益
+      pitch_level_max_rad_s: 0.65   # commit 期 pitch 拉平上限（rad/s）
+      pitch_level_blend: 0.05       # commit 期 pitch 拉平混合比
+      yaw_lock_enabled: true        # commit 期是否锁 yaw（发布 yaw_rate=0）
+      min_margin_x_px: 30.0         # 记录快照所需 x 边缘余量（px）
+      min_margin_y_px: 70.0         # 记录快照所需 y 边缘余量（px）
+    fallback:                       # commit 过期后的兜底（缓降而非立即拉平）
+      decay_tau_s: 1.5              # 兜底指令衰减时间常数（s）
+      max_s: 2.5                    # 兜底最长时间（s）
+      pitch_bias_rad: -0.10         # 兜底 pitch 目标偏置（rad，负=低头）
+  # ----- 丢失目标后处理（与 SITL target_loss_* 对齐；BF 无高度，高度门关闭）-----
+  target_loss:                      # 目标丢失后的处理
+    complete_on_loss_enable: true   # 丢失超时后是否结束打击模式（BF 可按需改 false）
+    loss_complete_s: 0.60           # 判定丢失并结束的超时（s）
+    lost_target_rate_decay_tau_s: 0.50  # Tracking→Waiting 角速度衰减时间常数（s）
+    complete_altitude_gate_enable: false   # 结束的高度门（BF 无高度，关）
+    complete_max_altitude_gap_m: 3.0       # 结束高度门的最大高度差（m）
+  require_armed_to_command: true    # 未解锁(armed)前禁止发非零 rate/thrust（L1 安全）
+  dry_run: false                    # 干跑模式：true 时不写实际角速度/推力（台架安全）
+  armed_latch_ttl_ms: 1500          # armed 缓存有效后的 TTL（ms），抑制状态包抖动误触 L1
+  armed_disarm_debounce_count: 50   # 连续判定解锁的采样次数阈值后才进 L1 fallback
+
+# 覆盖共享运行时配置中本模式需要不同的字段（bf_flight_config 在文件顶部）。
+bf_flight:
+  log_level: debug                  # 覆盖：StrikeController 默认开 debug 日志
