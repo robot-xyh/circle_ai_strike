@@ -59,6 +59,8 @@ circle::bf::runtime::BfControlResult PngControllerAdapter::update(
     const float frame_area = static_cast<float>(ctx.image_width) *
                              static_cast<float>(ctx.image_height);
     const float bbox_area = det.width * det.height;
+    input.bbox_area_px = std::max(0.0F, bbox_area);
+    input.detection_score = det.score;
     input.bbox_area_ratio =
         frame_area > 1.0F ? std::max(0.0F, bbox_area / frame_area) : 0.0F;
   }

@@ -41,7 +41,14 @@ strike_png:
   # 2.0 rad/s 指令实际约 3.34 rad/s（Super 放大 ~1.67×）；首飞宜更保守：
   max_roll_rate_rad_s: 2.0           # ≈ 69 deg/s，实际 ~1.6 rad/s
   max_pitch_rate_rad_s: 2.0
-  pixel_dot_lpf_tau_s: 0.055          # 像素误差微分 LPF 时间常数（s）
+  pixel_dot_lpf_tau_s: 0.055          # DKF 关闭/失效时的像素误差微分 LPF 回退时间常数（s）
+  dkf_enable: true                    # 启用延迟像素卡尔曼估计 ex/ey/ex_dot/ey_dot
+  dkf:
+    enable: true
+    process_accel_noise: 4.0          # LOS 加速度过程噪声；越大响应越快
+    meas_noise_px: 4.0                # 检测框中心测量噪声基准（像素）
+    predict_extra_delay_s: 0.03       # 额外预测延迟补偿（s）
+    max_cov_trace: 0.25               # 估计协方差 trace 超限则回退到差分 LPF
   nav_ratio_x: 2.5                      # 横向比例导引常数 N
   nav_ratio_y: 2.5                      # 纵向比例导引常数 N
   # 输出轴符号（±1）。内部数学为 PX4 基准（lateral=+1 roll=+ex，longitudinal=-1

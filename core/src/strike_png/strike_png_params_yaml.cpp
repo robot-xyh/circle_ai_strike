@@ -21,11 +21,24 @@ void assignFloatIfPresent(const YAML::Node& node, const char* key, float& out) {
   }
 }
 
+void loadDkfParams(const YAML::Node& node,
+                   circle::strike::DelayedPixelKalman::Params& out) {
+  assignIfPresent(node, "enable", out.enable);
+  assignFloatIfPresent(node, "process_accel_noise", out.process_accel_noise);
+  assignFloatIfPresent(node, "meas_noise_px", out.meas_noise_px);
+  assignFloatIfPresent(node, "predict_extra_delay_s", out.predict_extra_delay_s);
+  assignFloatIfPresent(node, "max_cov_trace", out.max_cov_trace);
+}
+
 void loadController(const YAML::Node& n, StrikePngParams& c) {
   assignIfPresent(n, "enable", c.enable);
   assignFloatIfPresent(n, "max_roll_rate_rad_s", c.max_roll_rate_rad_s);
   assignFloatIfPresent(n, "max_pitch_rate_rad_s", c.max_pitch_rate_rad_s);
   assignFloatIfPresent(n, "pixel_dot_lpf_tau_s", c.pixel_dot_lpf_tau_s);
+  assignIfPresent(n, "dkf_enable", c.dkf_enable);
+  if (n["dkf"]) {
+    loadDkfParams(n["dkf"], c.dkf);
+  }
   assignFloatIfPresent(n, "nav_ratio_x", c.nav_ratio_x);
   assignFloatIfPresent(n, "nav_ratio_y", c.nav_ratio_y);
   assignIfPresent(n, "derotate_body_rates", c.derotate_body_rates);
@@ -149,6 +162,14 @@ void clampNodeParams(StrikePngNodeParams& p) {
       std::clamp(p.controller.lateral_output_sign, -1.0F, 1.0F);
   p.controller.longitudinal_output_sign =
       std::clamp(p.controller.longitudinal_output_sign, -1.0F, 1.0F);
+  p.controller.dkf.process_accel_noise =
+      std::max(0.0F, p.controller.dkf.process_accel_noise);
+  p.controller.dkf.meas_noise_px =
+      std::max(0.1F, p.controller.dkf.meas_noise_px);
+  p.controller.dkf.predict_extra_delay_s =
+      std::clamp(p.controller.dkf.predict_extra_delay_s, 0.0F, 1.0F);
+  p.controller.dkf.max_cov_trace =
+      std::max(1.0e-6F, p.controller.dkf.max_cov_trace);
   // Mirror the PX4 executor clamps for the terminal-aim / prediction params so
   // BF and PX4 stay behaviorally aligned.
   p.controller.vertical_aim_ey =

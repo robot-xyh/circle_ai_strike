@@ -1208,6 +1208,132 @@ void testStrikePngControllerPredictsDelayedVisualMeasurement() {
   assert(out.roll_rate_rad_s > 0.12F);
 }
 
+void testStrikePngControllerUsesDkfLosEstimate() {
+  circle::strike_png::StrikePngController controller;
+  circle::strike_png::StrikePngParams params;
+  params.enable = true;
+  params.dkf_enable = true;
+  params.dkf.enable = true;
+  params.dkf.process_accel_noise = 100.0F;
+  params.dkf.meas_noise_px = 4.0F;
+  params.dkf.predict_extra_delay_s = 0.0F;
+  params.dkf.max_cov_trace = 10.0F;
+  params.pixel_dot_lpf_tau_s = 0.0F;
+  params.nav_ratio_x = 3.0F;
+  params.nav_ratio_y = 0.0F;
+  params.closure_base_scale = 1.0F;
+  params.closure_area_gain = 0.0F;
+  params.derotate_body_rates = false;
+  params.fov_trim_kp_rate = 0.0F;
+  params.edge_guard_enable = false;
+  params.pursuit_fallback_enable = false;
+
+  circle::strike_png::StrikePngInput first;
+  first.now_ns = 1000000000ULL;
+  first.measurement_ns = first.now_ns;
+  first.detection_valid = true;
+  first.ex = 0.00F;
+  first.ey = 0.00F;
+  first.bbox_area_px = 1600.0F;
+  first.detection_score = 0.90F;
+  first.fx = 500.0F;
+  first.fy = 500.0F;
+  (void)controller.tick(params, first);
+
+  circle::strike_png::StrikePngInput second = first;
+  second.now_ns += 50000000ULL;
+  second.measurement_ns += 50000000ULL;
+  second.ex = 0.05F;
+  const auto out = controller.tick(params, second);
+
+  assert(out.has_target);
+  assert(out.png_active);
+  assert(out.ex_dot_filt > 0.01F);
+  assert(out.roll_rate_rad_s > 0.01F);
+}
+
+void testStrikePngControllerDkfDisabledKeepsLegacyLosRate() {
+  circle::strike_png::StrikePngController controller;
+  circle::strike_png::StrikePngParams params;
+  params.enable = true;
+  params.dkf_enable = false;
+  params.pixel_dot_lpf_tau_s = 0.0F;
+  params.nav_ratio_x = 3.0F;
+  params.nav_ratio_y = 0.0F;
+  params.closure_base_scale = 1.0F;
+  params.closure_area_gain = 0.0F;
+  params.derotate_body_rates = false;
+  params.fov_trim_kp_rate = 0.0F;
+  params.edge_guard_enable = false;
+  params.pursuit_fallback_enable = false;
+
+  circle::strike_png::StrikePngInput first;
+  first.now_ns = 1000000000ULL;
+  first.measurement_ns = first.now_ns;
+  first.detection_valid = true;
+  first.ex = 0.00F;
+  first.ey = 0.00F;
+  (void)controller.tick(params, first);
+
+  circle::strike_png::StrikePngInput second = first;
+  second.now_ns += 50000000ULL;
+  second.measurement_ns += 50000000ULL;
+  second.ex = 0.05F;
+  const auto out = controller.tick(params, second);
+
+  assert(std::abs(out.ex_dot_filt - 1.0F) < 1.0e-4F);
+  assert(out.roll_rate_rad_s > 0.5F);
+}
+
+void testStrikePngControllerDkfRejectsOutOfOrderMeasurement() {
+  circle::strike_png::StrikePngController controller;
+  circle::strike_png::StrikePngParams params;
+  params.enable = true;
+  params.dkf_enable = true;
+  params.dkf.enable = true;
+  params.dkf.process_accel_noise = 100.0F;
+  params.dkf.meas_noise_px = 4.0F;
+  params.dkf.predict_extra_delay_s = 0.0F;
+  params.dkf.max_cov_trace = 10.0F;
+  params.los_rate_hold_tau_s = 0.0F;
+  params.nav_ratio_x = 3.0F;
+  params.nav_ratio_y = 0.0F;
+  params.closure_base_scale = 1.0F;
+  params.closure_area_gain = 0.0F;
+  params.derotate_body_rates = false;
+  params.fov_trim_kp_rate = 0.0F;
+  params.edge_guard_enable = false;
+  params.pursuit_fallback_enable = false;
+
+  circle::strike_png::StrikePngInput first;
+  first.now_ns = 1000000000ULL;
+  first.measurement_ns = first.now_ns;
+  first.detection_valid = true;
+  first.ex = 0.00F;
+  first.ey = 0.00F;
+  first.bbox_area_px = 1600.0F;
+  first.detection_score = 0.90F;
+  first.fx = 500.0F;
+  first.fy = 500.0F;
+  (void)controller.tick(params, first);
+
+  circle::strike_png::StrikePngInput second = first;
+  second.now_ns += 50000000ULL;
+  second.measurement_ns += 50000000ULL;
+  second.ex = 0.05F;
+  const auto with_new_measurement = controller.tick(params, second);
+
+  circle::strike_png::StrikePngInput stale = second;
+  stale.now_ns += 50000000ULL;
+  stale.measurement_ns = first.measurement_ns;
+  stale.ex = -0.50F;
+  const auto out = controller.tick(params, stale);
+
+  assert(out.ex_dot_filt >= 0.0F);
+  assert(out.ex_dot_filt <= with_new_measurement.ex_dot_filt + 1.0e-4F);
+  assert(out.roll_rate_rad_s >= 0.0F);
+}
+
 void testStrikePngGuidanceGuardsTerminalFovWithoutLosRate() {
   circle::strike_png::VisualPngGuidance guidance;
   circle::strike_png::VisualPngGuidanceParams params;
@@ -1801,6 +1927,9 @@ int main() {
   testStrikePngControllerTiltEnvelopeSoftCapAttenuates();
   testStrikePngControllerHoldsLosRateBetweenRepeatedSetpointTicks();
   testStrikePngControllerPredictsDelayedVisualMeasurement();
+  testStrikePngControllerUsesDkfLosEstimate();
+  testStrikePngControllerDkfDisabledKeepsLegacyLosRate();
+  testStrikePngControllerDkfRejectsOutOfOrderMeasurement();
   testStrikePngGuidanceGuardsTerminalFovWithoutLosRate();
   testStrikePngGuidanceOutputSignMirrorsAxes();
   testStrikePngGuidanceKeepsPursuingWhenLosRateIsSparse();

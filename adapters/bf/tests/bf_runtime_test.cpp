@@ -13,6 +13,7 @@
 #include "circle/debug_common/strike_png_param_tune.hpp"
 #include "circle/ipc/strike_telemetry_shm.hpp"
 #include "circle/strike_png/strike_png_node_params.hpp"
+#include "circle/strike_png/strike_png_params_yaml.hpp"
 
 #include <sys/mman.h>
 
@@ -223,6 +224,15 @@ void testPngTuneRoundTrip() {
   CHECK(circle::debug_common::applyStrikePngParamUpdate(
       params, R"({"name":"strike_png.lateral_output_sign","value":-1.0})"));
   CHECK(nearly(params.controller.lateral_output_sign, -1.0F));
+  CHECK(circle::debug_common::applyStrikePngParamUpdate(
+      params, R"({"name":"target_strike_png.dkf_enable","value":true})"));
+  CHECK(params.controller.dkf_enable);
+  CHECK(circle::debug_common::applyStrikePngParamUpdate(
+      params, R"({"name":"target_strike_png.dkf.process_accel_noise","value":42.0})"));
+  CHECK(nearly(params.controller.dkf.process_accel_noise, 42.0F));
+  CHECK(circle::debug_common::applyStrikePngParamUpdate(
+      params, R"({"name":"target_strike_png.dkf.predict_extra_delay_s","value":0.04})"));
+  CHECK(nearly(params.controller.dkf.predict_extra_delay_s, 0.04F));
   // Unknown key rejected.
   CHECK(!circle::debug_common::applyStrikePngParamUpdate(
       params, R"({"name":"target_strike_png.does_not_exist","value":1})"));
@@ -231,6 +241,7 @@ void testPngTuneRoundTrip() {
   const std::string json = circle::debug_common::strikePngParamsJson(params);
   CHECK(json.find("target_strike_png") != std::string::npos);
   CHECK(json.find("nav_ratio_x") != std::string::npos);
+  CHECK(json.find("dkf.process_accel_noise") != std::string::npos);
 }
 
 #if defined(CIRCLE_PILOT_CONFIG_DIR)
@@ -260,6 +271,15 @@ void testSharedRuntimeConfig() {
   CHECK(png.byte_track.emit_prediction_max_frames == 5);
   CHECK(nearly(png.byte_track.min_box_size_px, 4.0F));
   CHECK(nearly(png.byte_track.max_dt_s, 0.12F));
+  circle::strike_png::StrikePngNodeParams png_params =
+      circle::strike_png::loadStrikePngParamsFromYaml(
+          dir + "/strike_png_bf_flight.yaml");
+  CHECK(png_params.controller.dkf_enable);
+  CHECK(png_params.controller.dkf.enable);
+  CHECK(nearly(png_params.controller.dkf.process_accel_noise, 4.0F));
+  CHECK(nearly(png_params.controller.dkf.meas_noise_px, 4.0F));
+  CHECK(nearly(png_params.controller.dkf.predict_extra_delay_s, 0.03F));
+  CHECK(nearly(png_params.controller.dkf.max_cov_trace, 0.25F));
 
   // Strike flight config references the same shared file but overrides log_level.
   BfRuntimeConfig strike;

@@ -27,6 +27,7 @@ void StrikePngController::reset() {
   last_ey_ = 0.0F;
   ex_dot_filt_ = 0.0F;
   ey_dot_filt_ = 0.0F;
+  dkf_.reset();
   tilt_envelope_.reset();
 }
 
@@ -54,7 +55,33 @@ StrikePngOutput StrikePngController::tick(const StrikePngParams& params,
   const bool first_measurement = !last_valid_;
   const bool new_measurement =
       last_valid_ && measurement_ns > last_measurement_ns_;
-  if (new_measurement) {
+  const bool dkf_requested = params.dkf_enable && params.dkf.enable;
+  circle::strike::DelayedPixelKalman::Estimate dkf_est;
+  bool dkf_valid = false;
+
+  if (dkf_requested && input.fx > 1.0F && input.fy > 1.0F) {
+    if (first_measurement || new_measurement) {
+      circle::strike::DelayedPixelKalman::Measurement meas;
+      meas.image_stamp_ns = measurement_ns;
+      meas.receive_stamp_ns = input.now_ns;
+      meas.ex = input.ex;
+      meas.ey = input.ey;
+      meas.bbox_area_px = input.bbox_area_px;
+      meas.score = input.detection_score;
+      circle::types::CameraIntrinsics intr;
+      intr.fx = input.fx;
+      intr.fy = input.fy;
+      dkf_.addMeasurement(meas, intr, params.dkf);
+    }
+    dkf_est = dkf_.predict(input.now_ns, params.dkf);
+    dkf_valid =
+        dkf_est.valid && dkf_est.cov_trace <= std::max(1.0e-6F, params.dkf.max_cov_trace);
+  }
+
+  if (dkf_valid) {
+    ex_dot_filt_ = dkf_est.ex_dot;
+    ey_dot_filt_ = dkf_est.ey_dot;
+  } else if (new_measurement) {
     const float dt_s = std::max(
         1.0e-3F,
         static_cast<float>(measurement_ns - last_measurement_ns_) * kNsToS);
@@ -87,12 +114,12 @@ StrikePngOutput StrikePngController::tick(const StrikePngParams& params,
     last_ey_ = input.ey;
   }
 
-  float control_ex = input.ex;
-  float control_ey = input.ey;
+  float control_ex = dkf_valid ? dkf_est.ex : input.ex;
+  float control_ey = dkf_valid ? dkf_est.ey : input.ey;
   const float prediction_max_age_s =
       std::max(0.0F, params.visual_prediction_max_age_s);
   const float prediction_horizon_s =
-      params.visual_prediction_enable
+      params.visual_prediction_enable && !dkf_valid
           ? std::clamp(measurement_age_s, 0.0F, prediction_max_age_s)
           : 0.0F;
   if (prediction_horizon_s > 0.0F) {

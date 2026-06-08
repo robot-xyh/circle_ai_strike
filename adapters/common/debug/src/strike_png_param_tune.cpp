@@ -46,6 +46,12 @@ constexpr PngDesc kPngDescs[] = {
     {"max_roll_rate_rad_s", 0.05, 6.9813, 0.05, false},
     {"max_pitch_rate_rad_s", 0.05, 6.9813, 0.05, false},
     {"pixel_dot_lpf_tau_s", 0.0, 0.6, 0.005, false},
+    {"dkf_enable", 0.0, 1.0, 1.0, true},
+    {"dkf.enable", 0.0, 1.0, 1.0, true},
+    {"dkf.process_accel_noise", 0.0, 200.0, 1.0, false},
+    {"dkf.meas_noise_px", 0.1, 80.0, 0.5, false},
+    {"dkf.predict_extra_delay_s", 0.0, 0.2, 0.005, false},
+    {"dkf.max_cov_trace", 0.0001, 10.0, 0.01, false},
     {"nav_ratio_x", 0.0, 8.0, 0.1, false},
     {"nav_ratio_y", 0.0, 8.0, 0.1, false},
     {"derotate_body_rates", 0.0, 1.0, 1.0, true},
@@ -251,6 +257,16 @@ double pngParamValue(const StrikePngNodeParams& p, const std::string& key) {
   if (key == "entry_smooth_initial_thrust_z") {
     return p.entry_handoff.initial_thrust_z;
   }
+  if (key == "dkf_enable") return p.controller.dkf_enable ? 1.0 : 0.0;
+  if (key == "dkf.enable") return p.controller.dkf.enable ? 1.0 : 0.0;
+  if (key == "dkf.process_accel_noise") {
+    return p.controller.dkf.process_accel_noise;
+  }
+  if (key == "dkf.meas_noise_px") return p.controller.dkf.meas_noise_px;
+  if (key == "dkf.predict_extra_delay_s") {
+    return p.controller.dkf.predict_extra_delay_s;
+  }
+  if (key == "dkf.max_cov_trace") return p.controller.dkf.max_cov_trace;
   if (key == "tilt_cap.enable") return p.controller.tilt_cap.enable ? 1.0 : 0.0;
   if (key == "tilt_cap.max_roll_angle_deg") {
     return p.controller.tilt_cap.max_roll_angle_deg;
@@ -312,6 +328,18 @@ bool pngSetValue(StrikePngNodeParams& p, const std::string& key, double value) {
     p.entry_handoff.duration_s = static_cast<float>(value);
   } else if (key == "entry_smooth_initial_thrust_z") {
     p.entry_handoff.initial_thrust_z = static_cast<float>(value);
+  } else if (key == "dkf_enable") {
+    p.controller.dkf_enable = b;
+  } else if (key == "dkf.enable") {
+    p.controller.dkf.enable = b;
+  } else if (key == "dkf.process_accel_noise") {
+    p.controller.dkf.process_accel_noise = static_cast<float>(value);
+  } else if (key == "dkf.meas_noise_px") {
+    p.controller.dkf.meas_noise_px = static_cast<float>(value);
+  } else if (key == "dkf.predict_extra_delay_s") {
+    p.controller.dkf.predict_extra_delay_s = static_cast<float>(value);
+  } else if (key == "dkf.max_cov_trace") {
+    p.controller.dkf.max_cov_trace = static_cast<float>(value);
   } else if (key == "tilt_cap.enable") {
     p.controller.tilt_cap.enable = b;
   } else if (key == "tilt_cap.max_roll_angle_deg") {

@@ -1,7 +1,8 @@
 #pragma once
 
-#include "circle/strike_png/visual_png_guidance.hpp"
+#include "circle/strike/delayed_pixel_kalman.hpp"
 #include "circle/strike/modules/tilt_envelope.hpp"
+#include "circle/strike_png/visual_png_guidance.hpp"
 
 #include <cstdint>
 
@@ -27,6 +28,8 @@ struct StrikePngParams {
   float max_roll_rate_rad_s{1.2F};
   float max_pitch_rate_rad_s{1.2F};
   float pixel_dot_lpf_tau_s{0.08F};
+  bool dkf_enable{false};
+  circle::strike::DelayedPixelKalman::Params dkf{};
   float nav_ratio_x{3.0F};
   float nav_ratio_y{3.0F};
   bool derotate_body_rates{true};
@@ -103,6 +106,8 @@ struct StrikePngInput {
   float ex{0.0F};
   float ey{0.0F};
   float bbox_area_ratio{0.0F};
+  float bbox_area_px{0.0F};
+  float detection_score{0.0F};
   float fx{0.0F};
   float fy{0.0F};
   float roll_rate_rad_s{0.0F};
@@ -174,6 +179,7 @@ class StrikePngController {
   uint64_t last_measurement_ns_{0};
   float ex_dot_filt_{0.0F};
   float ey_dot_filt_{0.0F};
+  circle::strike::DelayedPixelKalman dkf_;
   VisualPngGuidance guidance_;
   circle::strike::TiltEnvelope tilt_envelope_;
 };
