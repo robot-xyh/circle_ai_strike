@@ -4,6 +4,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 #include "circle/perception/rknn_engine.hpp"
@@ -70,6 +71,7 @@ int getInt(const std::unordered_map<std::string, std::string>& kv,
   }
 }
 
+#if CIRCLE_PERCEPTION_USE_RKNN
 float detectionArea(const circle::types::Detection& d) {
   return std::max(0.0F, d.width) * std::max(0.0F, d.height);
 }
@@ -130,11 +132,13 @@ void logYoloAndTargetSelection(
             static_cast<int>(i) == filtered.best_index ? " **BEST**" : "");
   }
 }
+#endif
 
 }  // namespace
 
 VisionPipeline::VisionPipeline(VisionPipelineConfig config)
-    : config_(std::move(config)) {}
+    : config_(std::move(config)),
+      byte_track_(config_.byte_track) {}
 
 bool VisionPipeline::initialize() {
   if (!config_.detection_file.empty()) {
@@ -355,9 +359,15 @@ bool VisionPipeline::processRknnFrame(const FrameReady& frame,
   const auto filtered = circle::vision::filterDetections(
       typed, config_.filter,
       config_.filter.temporal_gating_enabled ? &track_hint_ : nullptr);
-  updateTrackHint(filtered.best_index >= 0
-                      ? &typed[static_cast<size_t>(filtered.best_index)]
-                      : nullptr);
+  std::optional<circle::types::Detection> tracked;
+  if (config_.byte_track.enabled) {
+    tracked = byte_track_.update(typed, config_.filter, frame.capture_ns,
+                                 frame.width, frame.height);
+  } else {
+    updateTrackHint(filtered.best_index >= 0
+                        ? &typed[static_cast<size_t>(filtered.best_index)]
+                        : nullptr);
+  }
   logYoloAndTargetSelection(yolo_dets, typed, filtered, config_.filter);
   const auto post_end = std::chrono::steady_clock::now();
   if (timing) {
@@ -366,7 +376,19 @@ bool VisionPipeline::processRknnFrame(const FrameReady& frame,
     timing->total_time_ms =
         std::chrono::duration<float, std::milli>(post_end - total_start).count();
     timing->raw_detections = static_cast<int>(typed.size());
-    timing->accepted_index = filtered.best_index;
+    timing->accepted_index =
+        (config_.byte_track.enabled && tracked.has_value())
+            ? (tracked->tracker_predicted ? -1 : filtered.best_index)
+            : filtered.best_index;
+  }
+  if (config_.byte_track.enabled) {
+    if (!tracked.has_value()) {
+      out.valid = false;
+      return false;
+    }
+    out.detection = *tracked;
+    out.valid = true;
+    return true;
   }
   if (filtered.best_index < 0) {
     out.valid = false;

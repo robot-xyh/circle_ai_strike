@@ -179,6 +179,10 @@ void pushMatchedDebugFrame(PerceptionShared& shared, std::vector<uint8_t> bgr,
 void applyZeroCopyInferResult(PerceptionShared& shared,
                               circle::perception::ZeroCopyInferResult&& result) {
   std::lock_guard<std::mutex> lk(shared.mu);
+  if (result.frame_seq <= shared.latest_pipeline_seq) {
+    shared.cv.notify_all();
+    return;
+  }
   const bool pipeline_ok =
       notePipelineTiming(shared.perf, result.frame_seq, result.pipeline);
   if (!pipeline_ok) {
@@ -218,6 +222,11 @@ void applyZeroCopyInferResult(PerceptionShared& shared,
   overlay.detection.class_name = result.detection.detection.class_name;
   overlay.detection.seq = result.frame_seq;
   overlay.detection.capture_ns = static_cast<int64_t>(result.detection.capture_ns);
+  overlay.detection.track_id = result.detection.detection.track_id;
+  overlay.detection.tracker_predicted =
+      result.detection.detection.tracker_predicted;
+  overlay.detection.tracker_lost_frames =
+      result.detection.detection.tracker_lost_frames;
   overlay.capture_time_ms = result.capture_time_ms;
   overlay.decode_time_ms = result.decode_time_ms;
   overlay.preprocess_time_ms = result.timing.preprocess_time_ms;
@@ -476,6 +485,10 @@ void inferThread(circle::perception::VisionPipeline& pipeline,
       overlay.detection.class_name = det.detection.class_name;
       overlay.detection.seq = frame.seq;
       overlay.detection.capture_ns = static_cast<int64_t>(det.capture_ns);
+      overlay.detection.track_id = det.detection.track_id;
+      overlay.detection.tracker_predicted = det.detection.tracker_predicted;
+      overlay.detection.tracker_lost_frames =
+          det.detection.tracker_lost_frames;
       overlay.capture_time_ms = frame.capture_time_ms;
       overlay.decode_time_ms = frame.decode_time_ms;
       overlay.preprocess_time_ms = timing.preprocess_time_ms;
@@ -925,6 +938,7 @@ int BfControlHost::Impl::run(std::atomic<bool>& running,
   perception_cfg.conf_threshold = cfg.conf_threshold;
   perception_cfg.iou_threshold = cfg.iou_threshold;
   perception_cfg.max_det = cfg.max_det;
+  perception_cfg.byte_track = cfg.byte_track;
   circle::perception::VisionPipeline perception(std::move(perception_cfg));
 
   std::thread camera_thread;
@@ -948,6 +962,7 @@ int BfControlHost::Impl::run(std::atomic<bool>& running,
     zcfg.vision.conf_threshold = cfg.conf_threshold;
     zcfg.vision.iou_threshold = cfg.iou_threshold;
     zcfg.vision.max_det = cfg.max_det;
+    zcfg.vision.byte_track = cfg.byte_track;
     zcfg.slot_count = std::clamp(cfg.zero_copy_slot_count, 1, 4);
     zcfg.infer_worker_count = std::clamp(cfg.infer_worker_count, 1, zcfg.slot_count);
     zcfg.vision.rknn_core_masks = cfg.rknn_core_masks;
@@ -1057,6 +1072,7 @@ int BfControlHost::Impl::run(std::atomic<bool>& running,
                       " filter.min_score=", cfg.filter.min_score,
                       " filter.min_bbox_area=", cfg.filter.min_bbox_area,
                       " filter.max_aspect=", cfg.filter.max_bbox_aspect_ratio,
+                      " byte_track=", (cfg.byte_track.enabled ? "on" : "off"),
                       " model=", cfg.model_path);
 
   // Control-loop cadence is independent of the MSP wire rate (msp_set_hz). Clamp
@@ -1262,7 +1278,8 @@ int BfControlHost::Impl::run(std::atomic<bool>& running,
     }
     prev_strike_engaged = strike_engaged;
 
-    if (strike_engaged && !engaged_fresh_seen && control_detection.valid) {
+    if (strike_engaged && !engaged_fresh_seen && control_detection.valid &&
+        !control_detection.detection.tracker_predicted) {
       const double det_age_s =
           circle::types::secondsBetween(control_detection.capture_ns, now_ns);
       if (det_age_s >= 0.0 && det_age_s <= cfg.engage_detection_fresh_timeout_s) {
@@ -1482,6 +1499,9 @@ int BfControlHost::Impl::run(std::atomic<bool>& running,
               << " yaw_sp=" << result.rates.yaw_rate_rad_s
               << " thrust_z=" << result.rates.thrust_z
               << " det_valid=" << (control_detection.valid ? 1 : 0)
+              << " det_track=" << control_detection.detection.track_id
+              << " det_pred="
+              << (control_detection.detection.tracker_predicted ? 1 : 0)
               << " coast_hits=" << detection_coast_hits
               << " engaged=" << (strike_engaged ? 1 : 0)
               << " fresh_seen=" << (engaged_fresh_seen ? 1 : 0)
@@ -1533,6 +1553,11 @@ int BfControlHost::Impl::run(std::atomic<bool>& running,
     overlay.detection.class_name = control_detection.detection.class_name;
     overlay.detection.seq = control_detection.seq;
     overlay.detection.capture_ns = static_cast<int64_t>(control_detection.capture_ns);
+    overlay.detection.track_id = control_detection.detection.track_id;
+    overlay.detection.tracker_predicted =
+        control_detection.detection.tracker_predicted;
+    overlay.detection.tracker_lost_frames =
+        control_detection.detection.tracker_lost_frames;
     overlay.image_ex = result.image_ex;
     overlay.image_ey = result.image_ey;
     overlay.roll_rate_rad_s = result.rates.roll_rate_rad_s;

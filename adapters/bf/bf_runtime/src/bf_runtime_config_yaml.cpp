@@ -132,6 +132,49 @@ void parseBfRuntimeNode(const YAML::Node& bf, BfRuntimeConfig& cfg) {
     if (bf["max_det"]) {
       cfg.max_det = bf["max_det"].as<int>();
     }
+    if (bf["byte_track"] && bf["byte_track"].IsMap()) {
+      const YAML::Node bt = bf["byte_track"];
+      if (bt["enabled"]) {
+        cfg.byte_track.enabled = bt["enabled"].as<bool>();
+      }
+      if (bt["high_score_threshold"]) {
+        cfg.byte_track.high_score_threshold =
+            bt["high_score_threshold"].as<float>();
+      }
+      if (bt["low_score_threshold"]) {
+        cfg.byte_track.low_score_threshold =
+            bt["low_score_threshold"].as<float>();
+      }
+      if (bt["new_track_threshold"]) {
+        cfg.byte_track.new_track_threshold =
+            bt["new_track_threshold"].as<float>();
+      }
+      if (bt["match_iou_threshold"]) {
+        cfg.byte_track.match_iou_threshold =
+            bt["match_iou_threshold"].as<float>();
+      }
+      if (bt["second_match_iou_threshold"]) {
+        cfg.byte_track.second_match_iou_threshold =
+            bt["second_match_iou_threshold"].as<float>();
+      }
+      if (bt["max_lost_frames"]) {
+        cfg.byte_track.max_lost_frames = bt["max_lost_frames"].as<int>();
+      }
+      if (bt["emit_prediction_on_miss"]) {
+        cfg.byte_track.emit_prediction_on_miss =
+            bt["emit_prediction_on_miss"].as<bool>();
+      }
+      if (bt["emit_prediction_max_frames"]) {
+        cfg.byte_track.emit_prediction_max_frames =
+            bt["emit_prediction_max_frames"].as<int>();
+      }
+      if (bt["min_box_size_px"]) {
+        cfg.byte_track.min_box_size_px = bt["min_box_size_px"].as<float>();
+      }
+      if (bt["max_dt_s"]) {
+        cfg.byte_track.max_dt_s = bt["max_dt_s"].as<float>();
+      }
+    }
     if (bf["preview_shm_enabled"]) {
       cfg.preview_shm_enabled = bf["preview_shm_enabled"].as<bool>();
     }

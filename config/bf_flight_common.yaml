@@ -38,12 +38,24 @@ bf_flight:
   rknn_core_masks: [1, 2, 4]        # 各 worker 绑定的 NPU 核掩码
   preview_shm_enabled: true         # 是否启用预览共享内存
   preview_max_fps: 15               # 预览最大帧率
-  conf_threshold: 0.20              # YOLO NMS 前置置信阈值
+  conf_threshold: 0.10              # YOLO NMS 前置置信阈值（ByteTrack 需要保留低分框）
   iou_threshold: 0.45               # NMS 的 IoU 阈值
   max_det: 300                      # 单帧最大检测数
+  byte_track:                       # 单目标 SOT-ByteTrack：YOLO 后的跨帧轨迹平滑
+    enabled: true                   # 是否启用单目标 ByteTrack
+    high_score_threshold: 0.25      # 高置信框阈值：用于主匹配/新建轨迹
+    low_score_threshold: 0.10       # 低置信框阈值：仅用于延续已有轨迹
+    new_track_threshold: 0.25       # 新建 Primary Track 的最低分数
+    match_iou_threshold: 0.30       # 高置信匹配 IoU 门限
+    second_match_iou_threshold: 0.20 # 低置信二阶段匹配 IoU 门限
+    max_lost_frames: 5              # 超过该漏检帧数后销毁轨迹
+    emit_prediction_on_miss: true   # 漏检短时输出 Kalman 预测框
+    emit_prediction_max_frames: 5   # 预测框最大连续输出帧数
+    min_box_size_px: 4.0            # 预测框最小边长，防止退化
+    max_dt_s: 0.12                  # 两帧 capture_ns 间隔超限则重置轨迹
   model_path: circle_pilot_object_tracking/models/drone_v8n_v21_kd_relu_lambda008_640_640_rknn_model/drone_v8n_v21_kd_relu_lambda008_640_640-rk3588.rknn  # RKNN 模型路径
   detection_file: ""                # 离线检测回放文件（空=用实时相机）
-  detection_coast_s: 0.40           # 漏检滑行窗口（s，复用上帧检测）
+  detection_coast_s: 0.0            # ByteTrack 已做短时预测；关闭旧框复用避免叠加滑行
   engage_require_fresh_detection: true   # 接管后是否要求先看到一帧新检测才发指令
   engage_detection_fresh_timeout_s: 0.30 # 「新检测」的新鲜度超时（s）
   watchdog_enabled: true            # 是否启用看门狗

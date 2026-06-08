@@ -8,6 +8,7 @@
 #include "circle/perception/rknn_engine.hpp"
 #include "circle/types/detection.hpp"
 #include "circle/vision/detection_filter.hpp"
+#include "circle/vision/sot_byte_track.hpp"
 #include "circle/vision/yolo_postprocess.hpp"
 
 namespace circle::perception {
@@ -28,6 +29,7 @@ struct VisionPipelineConfig {
   float conf_threshold{0.25F};
   float iou_threshold{0.45F};
   int max_det{300};
+  circle::vision::SotByteTrackParams byte_track{};
   /** Frames to keep the temporal-gating anchor alive across misses (raw=0 /
    *  best=-1) before resetting to cold-start largest-area selection. At ~90fps
    *  30 ≈ 0.33s, enough to bridge brief detection gaps without anchoring stale. */
@@ -65,6 +67,7 @@ class VisionPipeline {
   LetterboxParams letterbox_{};
   circle::vision::DetectionTrackHint track_hint_{};
   int track_hint_misses_{0};
+  circle::vision::SotByteTrack byte_track_;
 #if CIRCLE_PERCEPTION_USE_RKNN
   RknnEngine rknn_;
   std::vector<uint8_t> letterbox_buf_;

@@ -741,6 +741,7 @@ int main(int argc, char** argv) {
       circle::debug::WebRtcH264Sender::GstElementFromEncoderBackend(
           cfg.webrtc_encoder);
   wcfg.fps = std::clamp(cfg.webrtc_fps, 5.0, 30.0);
+  const double webrtc_fps = wcfg.fps;
   const int effective_bitrate = effectiveWebRtcBitrateKbps(
       cfg.webrtc_bitrate_kbps, wcfg.fps, cfg.webrtc_bitrate_scale_with_fps);
   wcfg.bitrate_kbps = effective_bitrate;
@@ -760,6 +761,11 @@ int main(int argc, char** argv) {
       [&](const std::string& body, const std::string& ip) {
         return webrtc.handleBrowserOffer(body, ip);
       });
+#else
+  const double webrtc_fps = std::clamp(cfg.webrtc_fps, 5.0, 30.0);
+  const int effective_bitrate = effectiveWebRtcBitrateKbps(
+      cfg.webrtc_bitrate_kbps, webrtc_fps, cfg.webrtc_bitrate_scale_with_fps);
+  const std::string encoder_name;
 #endif
 
   const std::string video_transport =
@@ -823,7 +829,7 @@ int main(int argc, char** argv) {
                                    last_preview_stamp_ns.load(),
                                    server.activeMjpegClients(),
                                    server.totalPreviewClients(),
-                                   wcfg.fps, cfg.webrtc_bitrate_kbps,
+                                   webrtc_fps, cfg.webrtc_bitrate_kbps,
                                    effective_bitrate, encoder_name
 #if defined(BF_DEBUGD_HAS_WEBRTC) && BF_DEBUGD_HAS_WEBRTC
                                    ,
@@ -866,7 +872,7 @@ int main(int argc, char** argv) {
               << " (nominal=" << cfg.webrtc_bitrate_kbps
               << " scale_fps="
               << (cfg.webrtc_bitrate_scale_with_fps ? "yes" : "no") << ")"
-              << " webrtc_fps=" << wcfg.fps
+              << " webrtc_fps=" << webrtc_fps
               << " transport=" << video_transport
 #endif
               << " (build: ice-filter-v2)";

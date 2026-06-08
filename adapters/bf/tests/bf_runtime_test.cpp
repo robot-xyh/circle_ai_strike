@@ -243,17 +243,30 @@ void testSharedRuntimeConfig() {
   circle::bf::runtime::loadBfRuntimeConfigFromYaml(
       dir + "/strike_png_bf_flight.yaml", png);
   CHECK(png.msp.device == "/dev/ttyS1");           // from shared file
-  CHECK(nearly(png.rc.max_roll_rate_rad_s, 5.236F)); // BF linear 300 deg/s满杆
+  CHECK(nearly(png.rc.max_roll_rate_rad_s, 3.491F)); // shared Profile C rate map
   CHECK(nearly(static_cast<float>(png.throttle_handover_s), 0.4F));
   CHECK(nearly(static_cast<float>(png.control_loop_hz), 200.0F)); // shared default
   CHECK(png.log_level == "info");                  // shared default (no override)
+  CHECK(nearly(png.conf_threshold, 0.10F));
+  CHECK(nearly(static_cast<float>(png.detection_coast_s), 0.0F));
+  CHECK(png.byte_track.enabled);
+  CHECK(nearly(png.byte_track.high_score_threshold, 0.25F));
+  CHECK(nearly(png.byte_track.low_score_threshold, 0.10F));
+  CHECK(nearly(png.byte_track.new_track_threshold, 0.25F));
+  CHECK(nearly(png.byte_track.match_iou_threshold, 0.30F));
+  CHECK(nearly(png.byte_track.second_match_iou_threshold, 0.20F));
+  CHECK(png.byte_track.max_lost_frames == 5);
+  CHECK(png.byte_track.emit_prediction_on_miss);
+  CHECK(png.byte_track.emit_prediction_max_frames == 5);
+  CHECK(nearly(png.byte_track.min_box_size_px, 4.0F));
+  CHECK(nearly(png.byte_track.max_dt_s, 0.12F));
 
   // Strike flight config references the same shared file but overrides log_level.
   BfRuntimeConfig strike;
   circle::bf::runtime::loadBfRuntimeConfigFromYaml(
       dir + "/strike_bf_flight.yaml", strike);
   CHECK(strike.msp.device == "/dev/ttyS1");        // shared base still applied
-  CHECK(nearly(strike.rc.max_roll_rate_rad_s, 5.236F));
+  CHECK(nearly(strike.rc.max_roll_rate_rad_s, 3.491F));
   CHECK(strike.log_level == "debug");              // inline override wins
 }
 #endif

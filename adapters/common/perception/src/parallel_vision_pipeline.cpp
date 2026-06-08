@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iostream>
 #include <mutex>
+#include <optional>
 
 #include "circle/types/time.hpp"
 #include "circle/vision/yolo_postprocess.hpp"
@@ -22,6 +23,7 @@ int coreMaskForSlot(const VisionPipelineConfig& config, int slot_index) {
 }
 #endif
 
+#if CIRCLE_PERCEPTION_USE_RKNN
 float detectionArea(const circle::types::Detection& d) {
   return std::max(0.0F, d.width) * std::max(0.0F, d.height);
 }
@@ -82,11 +84,13 @@ void logYoloAndTargetSelection(
             static_cast<int>(i) == filtered.best_index ? " **BEST**" : "");
   }
 }
+#endif
 
 }  // namespace
 
 ParallelVisionPipeline::ParallelVisionPipeline(VisionPipelineConfig config)
-    : config_(std::move(config)) {}
+    : config_(std::move(config)),
+      byte_track_(config_.byte_track) {}
 
 bool ParallelVisionPipeline::initialize(int slot_count) {
   engines_.clear();
@@ -248,9 +252,17 @@ bool ParallelVisionPipeline::postprocessEngine(
   const auto filtered = circle::vision::filterDetections(
       typed, config_.filter,
       config_.filter.temporal_gating_enabled ? &hint : nullptr);
-  updateTrackHint(filtered.best_index >= 0
-                      ? &typed[static_cast<size_t>(filtered.best_index)]
-                      : nullptr);
+  std::optional<circle::types::Detection> tracked;
+  if (config_.byte_track.enabled) {
+    std::lock_guard<std::mutex> lk(track_mu_);
+    tracked = byte_track_.update(typed, config_.filter, out.capture_ns,
+                                 static_cast<uint32_t>(src_w),
+                                 static_cast<uint32_t>(src_h));
+  } else {
+    updateTrackHint(filtered.best_index >= 0
+                        ? &typed[static_cast<size_t>(filtered.best_index)]
+                        : nullptr);
+  }
   logYoloAndTargetSelection(yolo_dets, typed, filtered, config_.filter);
   const auto post_end = std::chrono::steady_clock::now();
   if (timing) {
@@ -259,7 +271,19 @@ bool ParallelVisionPipeline::postprocessEngine(
     timing->total_time_ms =
         std::chrono::duration<float, std::milli>(post_end - total_start).count();
     timing->raw_detections = static_cast<int>(typed.size());
-    timing->accepted_index = filtered.best_index;
+    timing->accepted_index =
+        (config_.byte_track.enabled && tracked.has_value())
+            ? (tracked->tracker_predicted ? -1 : filtered.best_index)
+            : filtered.best_index;
+  }
+  if (config_.byte_track.enabled) {
+    if (!tracked.has_value()) {
+      out.valid = false;
+      return false;
+    }
+    out.detection = *tracked;
+    out.valid = true;
+    return true;
   }
   if (filtered.best_index < 0) {
     out.valid = false;

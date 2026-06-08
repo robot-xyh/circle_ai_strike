@@ -18,6 +18,7 @@
 #include "circle/strike_png/strike_png_controller.hpp"
 #include "circle/strike_png/target_loss_hold.hpp"
 #include "circle/types/time.hpp"
+#include "circle/vision/sot_byte_track.hpp"
 #include "circle/vision/yolo_postprocess.hpp"
 
 namespace {
@@ -28,6 +29,113 @@ void testYoloPostprocess() {
   const auto dets = circle::vision::yoloPostprocess(
       output, shape, 2, 640, 480, 1.0F, 0, 0, 0.25F, 0.45F, 10);
   assert(dets.size() == 1);
+}
+
+circle::types::Detection makeTrackDet(float cx,
+                                       float cy,
+                                       float w,
+                                       float h,
+                                       float score = 0.9F) {
+  circle::types::Detection d;
+  d.cx = cx;
+  d.cy = cy;
+  d.width = w;
+  d.height = h;
+  d.score = score;
+  d.class_name = "UAV";
+  d.class_id = 0;
+  return d;
+}
+
+void testSotByteTrackSingleTarget() {
+  circle::vision::SotByteTrackParams params;
+  params.enabled = true;
+  params.high_score_threshold = 0.25F;
+  params.low_score_threshold = 0.10F;
+  params.max_lost_frames = 2;
+  params.emit_prediction_max_frames = 2;
+  params.max_dt_s = 0.20F;
+  circle::vision::SotByteTrack tracker(params);
+  circle::vision::DetectionFilterParams filter;
+  filter.target_class_name = "UAV";
+  filter.min_bbox_area = 20.0;
+  filter.max_bbox_aspect_ratio = 5.0;
+
+  const auto first = tracker.update({makeTrackDet(100.0F, 120.0F, 30.0F, 20.0F)},
+                                    filter, 1'000'000'000ULL, 640, 512);
+  assert(first.has_value());
+  assert(first->track_id == 1);
+  assert(!first->tracker_predicted);
+
+  const auto second =
+      tracker.update({makeTrackDet(104.0F, 121.0F, 30.0F, 20.0F)}, filter,
+                     1'033'000'000ULL, 640, 512);
+  assert(second.has_value());
+  assert(second->track_id == 1);
+  assert(!second->tracker_predicted);
+
+  const auto low =
+      tracker.update({makeTrackDet(108.0F, 122.0F, 30.0F, 20.0F, 0.12F)},
+                     filter, 1'066'000'000ULL, 640, 512);
+  assert(low.has_value());
+  assert(low->track_id == 1);
+  assert(!low->tracker_predicted);
+}
+
+void testSotByteTrackPredictionAndExpiry() {
+  circle::vision::SotByteTrackParams params;
+  params.enabled = true;
+  params.max_lost_frames = 2;
+  params.emit_prediction_max_frames = 2;
+  params.max_dt_s = 0.20F;
+  circle::vision::SotByteTrack tracker(params);
+  circle::vision::DetectionFilterParams filter;
+  filter.target_class_name = "UAV";
+  filter.min_bbox_area = 20.0;
+  filter.max_bbox_aspect_ratio = 5.0;
+
+  const auto first = tracker.update({makeTrackDet(200.0F, 220.0F, 40.0F, 30.0F)},
+                                    filter, 2'000'000'000ULL, 640, 512);
+  assert(first.has_value());
+  const auto second =
+      tracker.update({makeTrackDet(208.0F, 220.0F, 60.0F, 45.0F)}, filter,
+                     2'033'000'000ULL, 640, 512);
+  assert(second.has_value());
+
+  const auto miss1 = tracker.update({}, filter, 2'066'000'000ULL, 640, 512);
+  assert(miss1.has_value());
+  assert(miss1->tracker_predicted);
+  assert(miss1->tracker_lost_frames == 1);
+  assert(std::abs(miss1->width - second->width) < 1.0e-3F);
+  assert(std::abs(miss1->height - second->height) < 1.0e-3F);
+
+  const auto miss2 = tracker.update({}, filter, 2'099'000'000ULL, 640, 512);
+  assert(miss2.has_value());
+  assert(miss2->tracker_predicted);
+  assert(miss2->tracker_lost_frames == 2);
+
+  const auto expired = tracker.update({}, filter, 2'132'000'000ULL, 640, 512);
+  assert(!expired.has_value());
+}
+
+void testSotByteTrackRejectsOutOfOrderFrames() {
+  circle::vision::SotByteTrackParams params;
+  params.enabled = true;
+  circle::vision::SotByteTrack tracker(params);
+  circle::vision::DetectionFilterParams filter;
+  filter.target_class_name = "UAV";
+
+  const auto first = tracker.update({makeTrackDet(300.0F, 200.0F, 40.0F, 30.0F)},
+                                    filter, 3'000'000'000ULL, 640, 512);
+  assert(first.has_value());
+  const auto stale = tracker.update({makeTrackDet(10.0F, 10.0F, 40.0F, 30.0F)},
+                                    filter, 2'999'000'000ULL, 640, 512);
+  assert(!stale.has_value());
+  const auto next = tracker.update({makeTrackDet(304.0F, 200.0F, 40.0F, 30.0F)},
+                                   filter, 3'033'000'000ULL, 640, 512);
+  assert(next.has_value());
+  assert(next->track_id == 1);
+  assert(next->cx > 250.0F);
 }
 
 void testMathUtils() {
@@ -1658,6 +1766,9 @@ void testStrikePngEntryHandoffSmoothlyBlendsToTargetCommand() {
 
 int main() {
   testYoloPostprocess();
+  testSotByteTrackSingleTarget();
+  testSotByteTrackPredictionAndExpiry();
+  testSotByteTrackRejectsOutOfOrderFrames();
   testMathUtils();
   testRateShaper();
   testEdgeProtection();

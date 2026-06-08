@@ -22,6 +22,9 @@ struct PreviewOverlayDetection {
   std::string class_name;
   uint64_t seq{0};
   int64_t capture_ns{0};
+  int track_id{-1};
+  bool tracker_predicted{false};
+  int tracker_lost_frames{0};
 };
 
 struct PreviewOverlayContext {
@@ -107,6 +110,9 @@ struct PreviewOverlayDetectionShmData {
   char class_name[64]{};
   uint64_t seq{0};
   int64_t capture_ns{0};
+  int32_t track_id{-1};
+  uint8_t tracker_predicted{0};
+  int32_t tracker_lost_frames{0};
 };
 
 /** SHM-safe POD struct mirroring PreviewOverlayContext.

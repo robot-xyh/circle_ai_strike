@@ -24,6 +24,9 @@ struct Detection {
   float score{0.0F};
   int class_id{-1};
   std::string class_name;
+  int track_id{-1};
+  bool tracker_predicted{false};
+  int tracker_lost_frames{0};
 };
 
 struct FrameDetection {

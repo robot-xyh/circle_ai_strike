@@ -12,6 +12,7 @@
 #include "circle/perception/camera_source.hpp"
 #include "circle/types/detection.hpp"
 #include "circle/vision/detection_filter.hpp"
+#include "circle/vision/sot_byte_track.hpp"
 
 namespace circle::bf::runtime {
 
@@ -37,6 +38,7 @@ struct BfRuntimeConfig {
   float conf_threshold{0.25F};
   float iou_threshold{0.45F};
   int max_det{300};
+  circle::vision::SotByteTrackParams byte_track{};
   double detection_coast_s{0.25};
   bool engage_require_fresh_detection{true};
   double engage_detection_fresh_timeout_s{0.30};

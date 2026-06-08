@@ -32,6 +32,7 @@ set(CIRCLE_STRIKE_CORE_SOURCES
   src/strike/modules/visual_png_guidance.cpp
   src/strike_png/visual_png_guidance.cpp
   src/strike_png/strike_png_controller.cpp
+  src/vision/sot_byte_track.cpp
   src/vision/yolo_postprocess.cpp
 )
 

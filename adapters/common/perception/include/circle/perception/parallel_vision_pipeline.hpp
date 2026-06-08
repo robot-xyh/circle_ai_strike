@@ -10,6 +10,7 @@
 #include "circle/perception/vision_pipeline.hpp"
 #include "circle/types/detection.hpp"
 #include "circle/vision/detection_filter.hpp"
+#include "circle/vision/sot_byte_track.hpp"
 
 namespace circle::perception {
 
@@ -62,6 +63,7 @@ class ParallelVisionPipeline {
   mutable std::mutex track_mu_;
   circle::vision::DetectionTrackHint track_hint_{};
   int track_hint_misses_{0};
+  circle::vision::SotByteTrack byte_track_;
 };
 
 }  // namespace circle::perception

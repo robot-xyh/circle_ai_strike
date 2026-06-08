@@ -275,6 +275,12 @@ void drawPreviewOverlay(cv::Mat& bgr, const PreviewOverlayContext& ctx) {
     label << (ctx.has_target ? "target:" : "cand:")
           << (ctx.detection.class_name.empty() ? "target" : ctx.detection.class_name)
           << " " << std::fixed << std::setprecision(2) << ctx.detection.score;
+    if (ctx.detection.track_id >= 0) {
+      label << " #" << ctx.detection.track_id;
+    }
+    if (ctx.detection.tracker_predicted) {
+      label << " PRED " << ctx.detection.tracker_lost_frames;
+    }
     if (!ctx.has_target) {
       label << " [no target]";
     }
@@ -544,6 +550,11 @@ PreviewOverlayShmData fromPreviewOverlayContext(const PreviewOverlayContext& ctx
                ctx.detection.class_name);
   data.detection.seq = ctx.detection.seq;
   data.detection.capture_ns = ctx.detection.capture_ns;
+  data.detection.track_id = static_cast<int32_t>(ctx.detection.track_id);
+  data.detection.tracker_predicted =
+      ctx.detection.tracker_predicted ? 1 : 0;
+  data.detection.tracker_lost_frames =
+      static_cast<int32_t>(ctx.detection.tracker_lost_frames);
 
   data.pixel_offset_x = optToShmFloat(ctx.pixel_offset_x);
   data.pixel_offset_y = optToShmFloat(ctx.pixel_offset_y);
@@ -646,6 +657,10 @@ PreviewOverlayContext toPreviewOverlayContext(const PreviewOverlayShmData& data)
       shmStrToStd(data.detection.class_name, sizeof(data.detection.class_name));
   ctx.detection.seq = data.detection.seq;
   ctx.detection.capture_ns = data.detection.capture_ns;
+  ctx.detection.track_id = static_cast<int>(data.detection.track_id);
+  ctx.detection.tracker_predicted = data.detection.tracker_predicted != 0;
+  ctx.detection.tracker_lost_frames =
+      static_cast<int>(data.detection.tracker_lost_frames);
 
   ctx.pixel_offset_x = shmToOptFloat(data.pixel_offset_x);
   ctx.pixel_offset_y = shmToOptFloat(data.pixel_offset_y);
