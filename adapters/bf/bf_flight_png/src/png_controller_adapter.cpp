@@ -17,6 +17,10 @@ uint64_t targetLostHoldDelayNs(double delay_s) {
   return static_cast<uint64_t>(std::max(0.0, delay_s) * 1.0e9);
 }
 
+constexpr float kNsToS = 1.0e-9F;
+constexpr float kRadWrap = static_cast<float>(2.0 * M_PI);
+constexpr uint64_t kBodyRateHistoryMaxAgeNs = 2'000'000'000ULL;
+
 }  // namespace
 
 PngControllerAdapter::PngControllerAdapter(circle::strike_png::StrikePngNodeParams params)
@@ -36,6 +40,8 @@ void PngControllerAdapter::onEngageRisingEdge(
 
 circle::bf::runtime::BfControlResult PngControllerAdapter::update(
     const circle::bf::runtime::BfControlContext& ctx) {
+  ingestBodyRateSample(ctx.vehicle);
+
   const auto& intr = ctx.intrinsics;
   const auto& det = ctx.detection.detection;
 
@@ -64,8 +70,38 @@ circle::bf::runtime::BfControlResult PngControllerAdapter::update(
     input.bbox_area_ratio =
         frame_area > 1.0F ? std::max(0.0F, bbox_area / frame_area) : 0.0F;
   }
-  input.roll_rate_rad_s = ctx.vehicle.roll_rate_rad_s;
-  input.pitch_rate_rad_s = ctx.vehicle.pitch_rate_rad_s;
+  input.derotate_rate_valid = false;
+  last_derotate_lookup_valid_ = false;
+  last_derotate_lookup_age_ms_ = 0.0F;
+  last_derotate_interp_gap_ms_ = 0.0F;
+  last_derotate_roll_rate_rad_s_ = 0.0F;
+  last_derotate_pitch_rate_rad_s_ = 0.0F;
+  if (params_.derotate_history_enable && input.detection_valid) {
+    const uint64_t lookup_ns = subtractNs(
+        input.measurement_ns, params_.camera_exposure_midpoint_offset_ns);
+    if (input.now_ns >= lookup_ns) {
+      last_derotate_lookup_age_ms_ =
+          static_cast<float>(input.now_ns - lookup_ns) * 1.0e-6F;
+    }
+    BodyRateLookup lookup;
+    if (lookupBodyRate(lookup_ns, lookup)) {
+      input.roll_rate_rad_s = lookup.sample.roll_rate_rad_s;
+      input.pitch_rate_rad_s = lookup.sample.pitch_rate_rad_s;
+      input.derotate_rate_valid = true;
+      last_derotate_lookup_valid_ = true;
+      last_derotate_interp_gap_ms_ = lookup.interp_gap_ms;
+      last_derotate_roll_rate_rad_s_ = lookup.sample.roll_rate_rad_s;
+      last_derotate_pitch_rate_rad_s_ = lookup.sample.pitch_rate_rad_s;
+    } else {
+      last_derotate_interp_gap_ms_ = lookup.interp_gap_ms;
+    }
+  } else if (!params_.derotate_history_enable) {
+    input.roll_rate_rad_s = ctx.vehicle.roll_rate_rad_s;
+    input.pitch_rate_rad_s = ctx.vehicle.pitch_rate_rad_s;
+    input.derotate_rate_valid = ctx.vehicle.valid;
+    last_derotate_roll_rate_rad_s_ = input.roll_rate_rad_s;
+    last_derotate_pitch_rate_rad_s_ = input.pitch_rate_rad_s;
+  }
   input.attitude_valid = ctx.vehicle.valid;
   input.vehicle_roll_rad = ctx.vehicle.roll_rad;
   input.vehicle_pitch_rad = ctx.vehicle.pitch_rad;
@@ -125,9 +161,156 @@ circle::bf::runtime::BfControlResult PngControllerAdapter::update(
   return result;
 }
 
+void PngControllerAdapter::resetBodyRateHistory() {
+  body_rate_history_ = {};
+  body_rate_start_ = 0;
+  body_rate_count_ = 0;
+  prev_vehicle_stamp_ns_ = 0;
+  prev_vehicle_roll_rad_ = 0.0F;
+  prev_vehicle_pitch_rad_ = 0.0F;
+  prev_vehicle_yaw_rad_ = 0.0F;
+  prev_vehicle_valid_ = false;
+  last_derotate_lookup_valid_ = false;
+  last_derotate_lookup_age_ms_ = 0.0F;
+  last_derotate_interp_gap_ms_ = 0.0F;
+  last_derotate_roll_rate_rad_s_ = 0.0F;
+  last_derotate_pitch_rate_rad_s_ = 0.0F;
+}
+
+uint64_t PngControllerAdapter::subtractNs(uint64_t stamp_ns, int64_t offset_ns) {
+  if (offset_ns >= 0) {
+    const uint64_t off = static_cast<uint64_t>(offset_ns);
+    return stamp_ns > off ? stamp_ns - off : 0U;
+  }
+  return stamp_ns + static_cast<uint64_t>(-offset_ns);
+}
+
+float PngControllerAdapter::angleDeltaRad(float newer_rad, float older_rad) {
+  float d = newer_rad - older_rad;
+  while (d > static_cast<float>(M_PI)) {
+    d -= kRadWrap;
+  }
+  while (d < -static_cast<float>(M_PI)) {
+    d += kRadWrap;
+  }
+  return d;
+}
+
+void PngControllerAdapter::ingestBodyRateSample(
+    const circle::types::FcState& vehicle) {
+  if (!vehicle.valid || vehicle.stamp_ns == 0U) {
+    prev_vehicle_valid_ = false;
+    return;
+  }
+
+  const uint64_t compensated_stamp_ns =
+      subtractNs(vehicle.stamp_ns, params_.fc_serial_latency_ns);
+  if (prev_vehicle_valid_ && compensated_stamp_ns > prev_vehicle_stamp_ns_) {
+    const float dt_s =
+        static_cast<float>(compensated_stamp_ns - prev_vehicle_stamp_ns_) *
+        kNsToS;
+    if (dt_s > 1.0e-4F && dt_s < 1.0F) {
+      BodyRateSample sample;
+      sample.stamp_ns = compensated_stamp_ns;
+      sample.roll_rate_rad_s =
+          angleDeltaRad(vehicle.roll_rad, prev_vehicle_roll_rad_) / dt_s;
+      sample.pitch_rate_rad_s =
+          angleDeltaRad(vehicle.pitch_rad, prev_vehicle_pitch_rad_) / dt_s;
+      sample.yaw_rate_rad_s =
+          angleDeltaRad(vehicle.yaw_rad, prev_vehicle_yaw_rad_) / dt_s;
+      sample.valid = std::isfinite(sample.roll_rate_rad_s) &&
+                     std::isfinite(sample.pitch_rate_rad_s) &&
+                     std::isfinite(sample.yaw_rate_rad_s);
+      if (sample.valid) {
+        const size_t insert =
+            (body_rate_start_ + body_rate_count_) % body_rate_history_.size();
+        body_rate_history_[insert] = sample;
+        if (body_rate_count_ < body_rate_history_.size()) {
+          ++body_rate_count_;
+        } else {
+          body_rate_start_ =
+              (body_rate_start_ + 1U) % body_rate_history_.size();
+        }
+        while (body_rate_count_ > 0U) {
+          const auto& oldest = body_rate_history_[body_rate_start_];
+          if (!oldest.valid ||
+              sample.stamp_ns - oldest.stamp_ns <= kBodyRateHistoryMaxAgeNs) {
+            break;
+          }
+          body_rate_start_ =
+              (body_rate_start_ + 1U) % body_rate_history_.size();
+          --body_rate_count_;
+        }
+      }
+    }
+  }
+
+  prev_vehicle_stamp_ns_ = compensated_stamp_ns;
+  prev_vehicle_roll_rad_ = vehicle.roll_rad;
+  prev_vehicle_pitch_rad_ = vehicle.pitch_rad;
+  prev_vehicle_yaw_rad_ = vehicle.yaw_rad;
+  prev_vehicle_valid_ = true;
+}
+
+bool PngControllerAdapter::lookupBodyRate(uint64_t lookup_ns,
+                                          BodyRateLookup& out) const {
+  if (lookup_ns == 0U || body_rate_count_ < 2U) {
+    return false;
+  }
+
+  const auto sample_at = [&](size_t logical_index) -> const BodyRateSample& {
+    return body_rate_history_[(body_rate_start_ + logical_index) %
+                              body_rate_history_.size()];
+  };
+
+  const BodyRateSample& first = sample_at(0);
+  const BodyRateSample& last = sample_at(body_rate_count_ - 1U);
+  if (!first.valid || !last.valid || lookup_ns < first.stamp_ns ||
+      lookup_ns > last.stamp_ns) {
+    return false;
+  }
+
+  for (size_t i = 0; i + 1U < body_rate_count_; ++i) {
+    const BodyRateSample& a = sample_at(i);
+    const BodyRateSample& b = sample_at(i + 1U);
+    if (!a.valid || !b.valid || lookup_ns < a.stamp_ns ||
+        lookup_ns > b.stamp_ns) {
+      continue;
+    }
+    const uint64_t gap_ns = b.stamp_ns - a.stamp_ns;
+    out.interp_gap_ms = static_cast<float>(gap_ns) * 1.0e-6F;
+    const float max_gap_s =
+        std::max(0.001F, params_.max_derotate_interpolation_gap_s);
+    if (static_cast<float>(gap_ns) * kNsToS > max_gap_s) {
+      return false;
+    }
+    if (gap_ns == 0U) {
+      out.sample = b;
+      return true;
+    }
+    const float u =
+        static_cast<float>(lookup_ns - a.stamp_ns) /
+        static_cast<float>(gap_ns);
+    out.sample.stamp_ns = lookup_ns;
+    out.sample.roll_rate_rad_s =
+        a.roll_rate_rad_s + u * (b.roll_rate_rad_s - a.roll_rate_rad_s);
+    out.sample.pitch_rate_rad_s =
+        a.pitch_rate_rad_s + u * (b.pitch_rate_rad_s - a.pitch_rate_rad_s);
+    out.sample.yaw_rate_rad_s =
+        a.yaw_rate_rad_s + u * (b.yaw_rate_rad_s - a.yaw_rate_rad_s);
+    out.sample.valid = true;
+    return true;
+  }
+  return false;
+}
+
 bool PngControllerAdapter::applyParamUpdateJson(const std::string& json) {
 #if defined(CIRCLE_STRIKE_HAS_YAML) && CIRCLE_STRIKE_HAS_YAML
-  return circle::debug_common::applyStrikePngParamUpdate(params_, json);
+  const bool ok = circle::debug_common::applyStrikePngParamUpdate(params_, json);
+  if (ok) {
+    resetBodyRateHistory();
+  }
+  return ok;
 #else
   (void)json;
   return false;
@@ -178,6 +361,15 @@ void PngControllerAdapter::fillTelemetry(
   sample.png_entry_handoff_progress = last_handoff_progress_;
   sample.png_tilt_softcap_roll = o.roll_tilt_softcap_factor;
   sample.png_tilt_softcap_pitch = o.pitch_tilt_softcap_factor;
+  sample.png_derotate_lookup_valid = last_derotate_lookup_valid_ ? 1 : 0;
+  sample.png_derotate_lookup_age_ms = last_derotate_lookup_age_ms_;
+  sample.png_derotate_interp_gap_ms = last_derotate_interp_gap_ms_;
+  sample.png_derotate_roll_rate_rad_s = last_derotate_roll_rate_rad_s_;
+  sample.png_derotate_pitch_rate_rad_s = last_derotate_pitch_rate_rad_s_;
+  sample.png_camera_exposure_midpoint_offset_ns =
+      static_cast<float>(params_.camera_exposure_midpoint_offset_ns);
+  sample.png_fc_serial_latency_ns =
+      static_cast<float>(params_.fc_serial_latency_ns);
   sample.png_intercept_active = o.terminal_intercept_active ? 1 : 0;
   sample.png_crossing_active = o.terminal_crossing_active ? 1 : 0;
   sample.png_fwd_guard_active = o.terminal_forward_speed_guard_active ? 1 : 0;

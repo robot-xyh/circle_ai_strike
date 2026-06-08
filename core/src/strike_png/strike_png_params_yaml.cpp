@@ -155,6 +155,8 @@ void clampNodeParams(StrikePngNodeParams& p) {
   p.hover_thrust_z = std::clamp(p.hover_thrust_z, 0.0F, 0.99F);
   p.strike_thrust_z = std::clamp(p.strike_thrust_z, 0.0F, 0.99F);
   p.target_lost_hold_delay_s = std::clamp(p.target_lost_hold_delay_s, 0.0, 5.0);
+  p.max_derotate_interpolation_gap_s =
+      std::clamp(p.max_derotate_interpolation_gap_s, 0.001F, 1.0F);
   p.entry_handoff.duration_s = std::clamp(p.entry_handoff.duration_s, 0.0F, 5.0F);
   p.entry_handoff.initial_thrust_z =
       std::clamp(p.entry_handoff.initial_thrust_z, 0.0F, 0.99F);
@@ -216,6 +218,13 @@ StrikePngNodeParams loadStrikePngParamsFromYaml(const std::string& path) {
   assignFloatIfPresent(n, "strike_thrust_z", p.strike_thrust_z);
   assignIfPresent(n, "target_lost_hold_enable", p.target_lost_hold_enable);
   assignIfPresent(n, "target_lost_hold_delay_s", p.target_lost_hold_delay_s);
+  assignIfPresent(n, "derotate_history_enable", p.derotate_history_enable);
+  assignIfPresent(n, "camera_exposure_midpoint_offset_ns",
+                  p.camera_exposure_midpoint_offset_ns);
+  assignIfPresent(n, "fc_serial_latency_ns", p.fc_serial_latency_ns);
+  assignFloatIfPresent(n, "max_derotate_interpolation_gap_s",
+                       p.max_derotate_interpolation_gap_s);
+  assignIfPresent(n, "body_rate_observer_enable", p.body_rate_observer_enable);
   assignIfPresent(n, "entry_smooth_enable", p.entry_handoff.enable);
   assignFloatIfPresent(n, "entry_smooth_duration_s", p.entry_handoff.duration_s);
   assignFloatIfPresent(n, "entry_smooth_initial_thrust_z",

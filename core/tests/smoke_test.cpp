@@ -1077,6 +1077,33 @@ void testStrikePngControllerCommandsLosRateSuppression() {
   assert(std::abs(out.roll_rate_rad_s) > 0.05F);
 }
 
+void testStrikePngGuidanceRequiresValidDerotationRate() {
+  circle::strike_png::VisualPngGuidance guidance;
+  circle::strike_png::VisualPngGuidanceParams params;
+  params.derotate_body_rates = true;
+  params.nav_ratio_x = 0.0F;
+  params.nav_ratio_y = 3.0F;
+  params.closure_base_scale = 1.0F;
+  params.closure_area_gain = 0.0F;
+  params.fov_trim_kp_rate = 0.0F;
+  params.max_feedforward_rad_s = 10.0F;
+
+  circle::strike_png::VisualPngGuidanceInput input;
+  input.derotate_rate_valid = false;
+  input.roll_rate_rad_s = 1.0F;
+  input.max_roll_rate_rad_s = 10.0F;
+  input.max_pitch_rate_rad_s = 10.0F;
+  auto out = guidance.compute(params, input);
+  assert(out.active);
+  assert(std::abs(out.pitch_rate_rad_s) < 1.0e-6F);
+  assert(std::abs(out.ey_dot_inertial) < 1.0e-6F);
+
+  input.derotate_rate_valid = true;
+  out = guidance.compute(params, input);
+  assert(out.ey_dot_inertial < -0.99F);
+  assert(std::abs(out.pitch_rate_rad_s) > 2.0F);
+}
+
 void testStrikePngControllerTiltEnvelopeHardCapLevels() {
   circle::strike_png::StrikePngController controller;
   circle::strike_png::StrikePngParams params;
@@ -1923,6 +1950,7 @@ int main() {
   testTelemetryOutput();
   testStrikePngControllerStartsInactiveWithoutTarget();
   testStrikePngControllerCommandsLosRateSuppression();
+  testStrikePngGuidanceRequiresValidDerotationRate();
   testStrikePngControllerTiltEnvelopeHardCapLevels();
   testStrikePngControllerTiltEnvelopeSoftCapAttenuates();
   testStrikePngControllerHoldsLosRateBetweenRepeatedSetpointTicks();

@@ -56,6 +56,11 @@ strike_png:
   lateral_output_sign: 1.0              # 横向(roll)输出符号（与 PX4 同向）
   longitudinal_output_sign: 1.0         # 纵向(pitch)：BF +=低头，与 PX4 -1.0 相反
   derotate_body_rates: false             # 是否用机体角速度去旋转视线速率
+  derotate_history_enable: true          # 维护 MSP_ATTITUDE 差分角速度历史；仅 derotate_body_rates=true 时用于补偿
+  camera_exposure_midpoint_offset_ns: 0  # 查询视觉曝光中点：measurement_ns - offset（先从 0 开始标定）
+  fc_serial_latency_ns: 0                # 写入飞控历史样本：vehicle.stamp_ns - latency（先从 0 开始标定）
+  max_derotate_interpolation_gap_s: 0.02 # 历史样本插值最大跨度；丢包超过此值则本帧禁用去旋转
+  body_rate_observer_enable: false       # 预留：机体角速度 observer 路径，首版默认关闭
   derotate_pitch_to_x_gain: 1.0         # pitch 角速度→x 像速去旋转增益
   derotate_roll_to_y_gain: 1.0          # roll 角速度→y 像速去旋转增益
   residual_rate_limit_rad_s: 0.7        # 残差速率限制（rad/s）

@@ -38,6 +38,11 @@ constexpr PngDesc kPngDescs[] = {
     {"strike_thrust_z", 0.0, 0.99, 0.005, false},
     {"target_lost_hold_enable", 0.0, 1.0, 1.0, true},
     {"target_lost_hold_delay_s", 0.0, 5.0, 0.05, false},
+    {"derotate_history_enable", 0.0, 1.0, 1.0, true},
+    {"camera_exposure_midpoint_offset_ns", -50000000.0, 50000000.0, 1000000.0, false},
+    {"fc_serial_latency_ns", 0.0, 50000000.0, 1000000.0, false},
+    {"max_derotate_interpolation_gap_s", 0.001, 0.2, 0.001, false},
+    {"body_rate_observer_enable", 0.0, 1.0, 1.0, true},
     {"entry_smooth_enable", 0.0, 1.0, 1.0, true},
     {"entry_smooth_duration_s", 0.0, 5.0, 0.05, false},
     {"entry_smooth_initial_thrust_z", 0.0, 0.99, 0.005, false},
@@ -252,6 +257,19 @@ double pngParamValue(const StrikePngNodeParams& p, const std::string& key) {
   if (key == "strike_thrust_z") return p.strike_thrust_z;
   if (key == "target_lost_hold_enable") return p.target_lost_hold_enable ? 1.0 : 0.0;
   if (key == "target_lost_hold_delay_s") return p.target_lost_hold_delay_s;
+  if (key == "derotate_history_enable") return p.derotate_history_enable ? 1.0 : 0.0;
+  if (key == "camera_exposure_midpoint_offset_ns") {
+    return static_cast<double>(p.camera_exposure_midpoint_offset_ns);
+  }
+  if (key == "fc_serial_latency_ns") {
+    return static_cast<double>(p.fc_serial_latency_ns);
+  }
+  if (key == "max_derotate_interpolation_gap_s") {
+    return p.max_derotate_interpolation_gap_s;
+  }
+  if (key == "body_rate_observer_enable") {
+    return p.body_rate_observer_enable ? 1.0 : 0.0;
+  }
   if (key == "entry_smooth_enable") return p.entry_handoff.enable ? 1.0 : 0.0;
   if (key == "entry_smooth_duration_s") return p.entry_handoff.duration_s;
   if (key == "entry_smooth_initial_thrust_z") {
@@ -322,6 +340,16 @@ bool pngSetValue(StrikePngNodeParams& p, const std::string& key, double value) {
     p.target_lost_hold_enable = b;
   } else if (key == "target_lost_hold_delay_s") {
     p.target_lost_hold_delay_s = value;
+  } else if (key == "derotate_history_enable") {
+    p.derotate_history_enable = b;
+  } else if (key == "camera_exposure_midpoint_offset_ns") {
+    p.camera_exposure_midpoint_offset_ns = static_cast<int64_t>(value);
+  } else if (key == "fc_serial_latency_ns") {
+    p.fc_serial_latency_ns = static_cast<int64_t>(value);
+  } else if (key == "max_derotate_interpolation_gap_s") {
+    p.max_derotate_interpolation_gap_s = static_cast<float>(value);
+  } else if (key == "body_rate_observer_enable") {
+    p.body_rate_observer_enable = b;
   } else if (key == "entry_smooth_enable") {
     p.entry_handoff.enable = b;
   } else if (key == "entry_smooth_duration_s") {

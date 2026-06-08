@@ -141,6 +141,7 @@ StrikePngOutput StrikePngController::tick(const StrikePngParams& params,
   out.measurement_age_s = measurement_age_s;
   out.control_ex = control_ex;
   out.control_ey = control_ey;
+  out.derotate_rate_valid = input.derotate_rate_valid;
 
   const auto png = guidance_.compute(
       VisualPngGuidanceParams{
@@ -212,6 +213,7 @@ StrikePngOutput StrikePngController::tick(const StrikePngParams& params,
           input.bbox_area_ratio,
           input.roll_rate_rad_s,
           input.pitch_rate_rad_s,
+          input.derotate_rate_valid,
           input.attitude_valid,
           input.vehicle_roll_rad,
           input.vehicle_pitch_rad,

@@ -76,6 +76,7 @@ struct VisualPngGuidanceInput {
   float bbox_area_ratio{0.0F};
   float roll_rate_rad_s{0.0F};
   float pitch_rate_rad_s{0.0F};
+  bool derotate_rate_valid{true};
   bool attitude_valid{false};
   float roll_rad{0.0F};
   float pitch_rad{0.0F};

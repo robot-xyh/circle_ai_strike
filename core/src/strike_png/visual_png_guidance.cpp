@@ -125,7 +125,7 @@ VisualPngGuidanceOutput VisualPngGuidance::compute(
 
   float ex_dot_inertial = finiteOrZero(input.ex_dot);
   float ey_dot_inertial = finiteOrZero(input.ey_dot);
-  if (params.derotate_body_rates) {
+  if (params.derotate_body_rates && input.derotate_rate_valid) {
     ex_dot_inertial += finiteOrZero(input.pitch_rate_rad_s) *
                        params.derotate_pitch_to_x_gain;
     ey_dot_inertial -= finiteOrZero(input.roll_rate_rad_s) *

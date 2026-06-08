@@ -95,6 +95,13 @@ struct StrikeTelemetrySample {
   float png_entry_handoff_progress{1.0F};
   float png_tilt_softcap_roll{1.0F};
   float png_tilt_softcap_pitch{1.0F};
+  float png_derotate_lookup_age_ms{0.0F};
+  float png_derotate_interp_gap_ms{0.0F};
+  float png_derotate_roll_rate_rad_s{0.0F};
+  float png_derotate_pitch_rate_rad_s{0.0F};
+  float png_camera_exposure_midpoint_offset_ns{0.0F};
+  float png_fc_serial_latency_ns{0.0F};
+  uint8_t png_derotate_lookup_valid{0};
   uint8_t png_intercept_active{0};
   uint8_t png_crossing_active{0};
   uint8_t png_fwd_guard_active{0};

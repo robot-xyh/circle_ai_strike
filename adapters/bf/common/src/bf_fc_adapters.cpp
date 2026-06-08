@@ -27,20 +27,6 @@ std::vector<uint16_t> normalizeRcChannels(const std::vector<uint16_t>& in,
   return out;
 }
 
-void mergeMaskedChannels(std::vector<uint16_t>* sent,
-                         const std::vector<uint16_t>& latched,
-                         uint32_t mask) {
-  if (!sent) {
-    return;
-  }
-  const size_t n = std::min(sent->size(), latched.size());
-  for (size_t i = 0; i < n; ++i) {
-    if ((mask & (1U << i)) != 0U) {
-      (*sent)[i] = latched[i];
-    }
-  }
-}
-
 /** OVERRIDE: latched physical sticks; merged MSP_RC is corrupt for ch0-3. */
 void buildOverridePassthroughSend(std::vector<uint16_t>* sent,
                                   const std::vector<uint16_t>& latched,
@@ -882,7 +868,6 @@ circle::types::FcState BfStateSource::ingestPoll(
   // this cycle update their slice; missing frames keep the last good value so
   // an alternating poll schedule never zeroes attitude / clears override.
   circle::types::FcState& out = last_fc_state_;
-  out.stamp_ns = circle::types::monotonicNowNs();
 
   const bool status_ok = poll.status_ok;
   if (status_ok) {
@@ -896,6 +881,7 @@ circle::types::FcState BfStateSource::ingestPoll(
 
   const bool attitude_ok = poll.attitude_ok;
   if (attitude_ok) {
+    out.stamp_ns = circle::types::monotonicNowNs();
     out.roll_rad = static_cast<float>(poll.attitude.roll_deci_deg) * 0.1F *
                    static_cast<float>(M_PI) / 180.0F;
     out.pitch_rad = static_cast<float>(poll.attitude.pitch_deci_deg) * 0.1F *
@@ -985,7 +971,6 @@ circle::types::FcState BfStateSource::ingestPoll(
 
 circle::types::FcState BfStateSource::snapshot() const {
   circle::types::FcState out;
-  out.stamp_ns = circle::types::monotonicNowNs();
   std::lock_guard<std::mutex> lk(mu_);
   MspAttitude att{};
   MspStatus status{};
@@ -1002,6 +987,7 @@ circle::types::FcState BfStateSource::snapshot() const {
 
   const bool attitude_ok = client_->readAttitude(att);
   if (attitude_ok) {
+    out.stamp_ns = circle::types::monotonicNowNs();
     out.roll_rad = static_cast<float>(att.roll_deci_deg) * 0.1F *
                    static_cast<float>(M_PI) / 180.0F;
     out.pitch_rad = static_cast<float>(att.pitch_deci_deg) * 0.1F *

@@ -12,7 +12,9 @@ if(TARGET circle_strike_core AND NOT TARGET circle::circle_strike_core)
   add_library(circle::circle_strike_core ALIAS circle_strike_core)
 endif()
 
-add_subdirectory(common)
+if(NOT TARGET circle_bf_common)
+  add_subdirectory(common)
+endif()
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common/ipc
   ${CMAKE_BINARY_DIR}/circle_ipc)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common/debug

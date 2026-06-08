@@ -153,6 +153,85 @@ void testPngAdapterMapping() {
   CHECK(std::isfinite(sample.png_measurement_age_s) &&
         sample.png_measurement_age_s >= 0.0F);
   CHECK(sample.png_loss_hold_latched == 0);
+  CHECK(sample.png_derotate_lookup_valid == 0);
+}
+
+void testPngDerotationHistoryUsesTimestampOffsets() {
+  circle::strike_png::StrikePngNodeParams params;
+  params.entry_handoff.enable = false;
+  params.derotate_history_enable = true;
+  params.fc_serial_latency_ns = 2'000'000;
+  params.camera_exposure_midpoint_offset_ns = 3'000'000;
+  params.max_derotate_interpolation_gap_s = 0.02F;
+  params.controller.derotate_body_rates = true;
+  params.controller.nav_ratio_x = 0.0F;
+  params.controller.nav_ratio_y = 3.0F;
+  params.controller.closure_base_scale = 1.0F;
+  params.controller.closure_area_gain = 0.0F;
+  params.controller.fov_trim_kp_rate = 0.0F;
+
+  circle::bf::png::PngControllerAdapter adapter(params);
+  BfControlContext ctx = makeCenteredContext(100'000'000ULL, true);
+  adapter.onEngageRisingEdge(ctx);
+
+  ctx.vehicle.stamp_ns = 100'000'000ULL;
+  ctx.vehicle.roll_rad = 0.00F;
+  ctx.detection.capture_ns = 94'000'000ULL;
+  (void)adapter.update(ctx);
+
+  ctx = makeCenteredContext(110'000'000ULL, true);
+  ctx.vehicle.stamp_ns = 110'000'000ULL;
+  ctx.vehicle.roll_rad = 0.10F;
+  ctx.detection.capture_ns = 105'000'000ULL;
+  (void)adapter.update(ctx);
+
+  ctx = makeCenteredContext(120'000'000ULL, true);
+  ctx.vehicle.stamp_ns = 120'000'000ULL;
+  ctx.vehicle.roll_rad = 0.20F;
+  ctx.detection.capture_ns = 115'000'000ULL;
+  (void)adapter.update(ctx);
+
+  circle::ipc::StrikeTelemetrySample sample;
+  adapter.fillTelemetry(sample, BfControlResult{});
+  CHECK(sample.png_derotate_lookup_valid == 1);
+  CHECK(nearly(sample.png_derotate_roll_rate_rad_s, 10.0F, 1.0e-3F));
+  CHECK(nearly(sample.png_derotate_interp_gap_ms, 10.0F, 1.0e-3F));
+  CHECK(nearly(sample.png_derotate_lookup_age_ms, 8.0F, 1.0e-3F));
+  CHECK(nearly(sample.png_fc_serial_latency_ns, 2'000'000.0F, 1.0F));
+  CHECK(nearly(sample.png_camera_exposure_midpoint_offset_ns, 3'000'000.0F, 1.0F));
+}
+
+void testPngDerotationHistoryRejectsLargeInterpolationGap() {
+  circle::strike_png::StrikePngNodeParams params;
+  params.entry_handoff.enable = false;
+  params.derotate_history_enable = true;
+  params.max_derotate_interpolation_gap_s = 0.02F;
+  params.controller.derotate_body_rates = true;
+
+  circle::bf::png::PngControllerAdapter adapter(params);
+  BfControlContext ctx = makeCenteredContext(100'000'000ULL, true);
+  adapter.onEngageRisingEdge(ctx);
+
+  ctx.vehicle.stamp_ns = 100'000'000ULL;
+  ctx.vehicle.roll_rad = 0.00F;
+  ctx.detection.capture_ns = 95'000'000ULL;
+  (void)adapter.update(ctx);
+
+  ctx = makeCenteredContext(150'000'000ULL, true);
+  ctx.vehicle.stamp_ns = 150'000'000ULL;
+  ctx.vehicle.roll_rad = 0.10F;
+  ctx.detection.capture_ns = 145'000'000ULL;
+  (void)adapter.update(ctx);
+
+  ctx = makeCenteredContext(200'000'000ULL, true);
+  ctx.vehicle.stamp_ns = 200'000'000ULL;
+  ctx.vehicle.roll_rad = 0.20F;
+  ctx.detection.capture_ns = 175'000'000ULL;
+  (void)adapter.update(ctx);
+
+  circle::ipc::StrikeTelemetrySample sample;
+  adapter.fillTelemetry(sample, BfControlResult{});
+  CHECK(sample.png_derotate_lookup_valid == 0);
 }
 
 void testPngSeriesJson() {
@@ -170,6 +249,8 @@ void testPngSeriesJson() {
   s.png_ff_pitch_rad_s = -0.15F;
   s.png_closure_scale = 0.8F;
   s.png_entry_handoff_progress = 1.0F;
+  s.png_derotate_lookup_valid = 1;
+  s.png_derotate_interp_gap_ms = 10.0F;
   writer.publish(s);
 
   circle::ipc::StrikeTelemetryReader reader;
@@ -180,6 +261,8 @@ void testPngSeriesJson() {
   CHECK(json.find("\"strike_backend\":\"bf\"") != std::string::npos);
   CHECK(json.find("png_ff_roll_rad_s") != std::string::npos);
   CHECK(json.find("png_entry_handoff_progress") != std::string::npos);
+  CHECK(json.find("derotate_lookup_valid") != std::string::npos);
+  CHECK(json.find("derotate_interp_gap_ms") != std::string::npos);
   // BF has no measured body rates -> emitted as null, never a finite number.
   const size_t pos = json.find("\"vehicle_roll_rate_rad_s\":[");
   CHECK(pos != std::string::npos);
@@ -233,6 +316,18 @@ void testPngTuneRoundTrip() {
   CHECK(circle::debug_common::applyStrikePngParamUpdate(
       params, R"({"name":"target_strike_png.dkf.predict_extra_delay_s","value":0.04})"));
   CHECK(nearly(params.controller.dkf.predict_extra_delay_s, 0.04F));
+  CHECK(circle::debug_common::applyStrikePngParamUpdate(
+      params, R"({"name":"target_strike_png.camera_exposure_midpoint_offset_ns","value":4000000})"));
+  CHECK(params.camera_exposure_midpoint_offset_ns == 4000000);
+  CHECK(circle::debug_common::applyStrikePngParamUpdate(
+      params, R"({"name":"target_strike_png.fc_serial_latency_ns","value":3000000})"));
+  CHECK(params.fc_serial_latency_ns == 3000000);
+  CHECK(circle::debug_common::applyStrikePngParamUpdate(
+      params, R"({"name":"target_strike_png.max_derotate_interpolation_gap_s","value":0.015})"));
+  CHECK(nearly(params.max_derotate_interpolation_gap_s, 0.015F));
+  CHECK(circle::debug_common::applyStrikePngParamUpdate(
+      params, R"({"name":"target_strike_png.derotate_history_enable","value":false})"));
+  CHECK(!params.derotate_history_enable);
   // Unknown key rejected.
   CHECK(!circle::debug_common::applyStrikePngParamUpdate(
       params, R"({"name":"target_strike_png.does_not_exist","value":1})"));
@@ -242,6 +337,7 @@ void testPngTuneRoundTrip() {
   CHECK(json.find("target_strike_png") != std::string::npos);
   CHECK(json.find("nav_ratio_x") != std::string::npos);
   CHECK(json.find("dkf.process_accel_noise") != std::string::npos);
+  CHECK(json.find("camera_exposure_midpoint_offset_ns") != std::string::npos);
 }
 
 #if defined(CIRCLE_PILOT_CONFIG_DIR)
@@ -298,6 +394,8 @@ int main() {
   testDecideBfPublish();
   testThrottleBlend();
   testPngAdapterMapping();
+  testPngDerotationHistoryUsesTimestampOffsets();
+  testPngDerotationHistoryRejectsLargeInterpolationGap();
   testPngSeriesJson();
   testStrikeAdapterSmoke();
 #if defined(CIRCLE_STRIKE_HAS_YAML) && CIRCLE_STRIKE_HAS_YAML

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 #include "circle/bf/runtime/bf_strike_controller_iface.hpp"
@@ -36,12 +39,47 @@ class PngControllerAdapter final : public circle::bf::runtime::IBfStrikeControll
       const circle::bf::runtime::BfControlResult& result) const override;
 
  private:
+  struct BodyRateSample {
+    uint64_t stamp_ns{0};
+    float roll_rate_rad_s{0.0F};
+    float pitch_rate_rad_s{0.0F};
+    float yaw_rate_rad_s{0.0F};
+    bool valid{false};
+  };
+
+  struct BodyRateLookup {
+    BodyRateSample sample{};
+    float interp_gap_ms{0.0F};
+  };
+
+  static constexpr size_t kBodyRateHistorySize = 256;
+
+  void resetBodyRateHistory();
+  void ingestBodyRateSample(const circle::types::FcState& vehicle);
+  [[nodiscard]] bool lookupBodyRate(uint64_t lookup_ns,
+                                    BodyRateLookup& out) const;
+  [[nodiscard]] static float angleDeltaRad(float newer_rad, float older_rad);
+  [[nodiscard]] static uint64_t subtractNs(uint64_t stamp_ns, int64_t offset_ns);
+
   circle::strike_png::StrikePngNodeParams params_;
   circle::strike_png::StrikePngController controller_;
   circle::strike_png::TargetLossHoldState loss_state_{};
   circle::strike_png::EntryHandoffSnapshot entry_snapshot_{};
   circle::strike_png::StrikePngInput last_input_{};
   circle::strike_png::StrikePngOutput last_output_{};
+  std::array<BodyRateSample, kBodyRateHistorySize> body_rate_history_{};
+  size_t body_rate_start_{0};
+  size_t body_rate_count_{0};
+  uint64_t prev_vehicle_stamp_ns_{0};
+  float prev_vehicle_roll_rad_{0.0F};
+  float prev_vehicle_pitch_rad_{0.0F};
+  float prev_vehicle_yaw_rad_{0.0F};
+  bool prev_vehicle_valid_{false};
+  bool last_derotate_lookup_valid_{false};
+  float last_derotate_lookup_age_ms_{0.0F};
+  float last_derotate_interp_gap_ms_{0.0F};
+  float last_derotate_roll_rate_rad_s_{0.0F};
+  float last_derotate_pitch_rate_rad_s_{0.0F};
   float last_detection_score_{0.0F};
   float last_handoff_progress_{1.0F};
   bool last_loss_hold_latched_{false};

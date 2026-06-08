@@ -1992,7 +1992,7 @@ function syncTuneVerticalLayout(mode){
     setText('h3_longitudinal','Pitch overview: ey vs pitch_rate_sp (deg/s)'+(isBfPng?' \u00B7 actual rate N/A (BF)':''));
     setText('h3_thrust','Throttle: '+(isBfPng?'T_algo / T_cmd / T_act (0..1, BF MSP)':'T_set / T_tgt / T_cmd / T_act'));
     setText('h3_att','Vehicle attitude (deg) \u00B7 PNG closure & LOS');
-    setText('h3_rates','Body rates: setpoint vs actual (deg/s)'+(isBfPng?' \u00B7 actual N/A (BF)':''));
+    setText('h3_rates','Body rates: setpoint vs actual (deg/s)'+(isBfPng?' \u00B7 derived history (BF)':''));
     setText('h3_yaw','Roll components (deg/s): ff / fov_trim / edge / pursuit / stale / intercept');
     setText('h3_tilt','Pitch components (deg/s): ff / fov_trim / edge / pursuit / intercept / crossing');
   }else if(isRates){
@@ -2238,16 +2238,21 @@ function applySeriesPayload(reqId, j){
       const ratesHeader=document.getElementById('h3_rates');
       const ratesCanvas=document.getElementById('c_rates');
       const hasActualRates=Array.isArray(j.vehicle_roll_rate_rad_s)&&j.vehicle_roll_rate_rad_s.some(v=>v!=null&&isFinite(v));
-      const showRates=!isBfStrike&&(tuneMode==='rates_ctrl'||hasActualRates);
+      const hasDerotateRates=Array.isArray(j.derotate_lookup_valid)&&j.derotate_lookup_valid.some(v=>v!=null&&Number(v)>0);
+      const showRates=(!isBfStrike&&(tuneMode==='rates_ctrl'||hasActualRates))||(isPng&&hasDerotateRates);
       if(ratesHeader) ratesHeader.style.display=showRates?'':'none';
       if(ratesCanvas) ratesCanvas.style.display=showRates?'':'none';
       if(showRates){
-        drawCanvas('c_rates',t,
-          [radArrToDeg(j.vision_roll_sp_rad),radArrToDeg(j.vision_pitch_sp_rad),radArrToDeg(j.vision_yaw_rate_sp_rad_s),
-           radArrToDeg(j.vehicle_roll_rate_rad_s),radArrToDeg(j.vehicle_pitch_rate_rad_s),radArrToDeg(j.vehicle_yaw_rate_rad_s)],
-          ['roll_sp','pitch_sp','yaw_sp','roll_act','pitch_act','yaw_act'],
-          ['#8af','#fa8','#fc6','#3a78d6','#d67a3a','#c89a1a'],
-          tp,hov('c_rates'));
+        const rateSeries=[radArrToDeg(j.vision_roll_sp_rad),radArrToDeg(j.vision_pitch_sp_rad),radArrToDeg(j.vision_yaw_rate_sp_rad_s),
+          radArrToDeg(j.vehicle_roll_rate_rad_s),radArrToDeg(j.vehicle_pitch_rate_rad_s),radArrToDeg(j.vehicle_yaw_rate_rad_s)];
+        const rateLabels=['roll_sp','pitch_sp','yaw_sp','roll_act','pitch_act','yaw_act'];
+        const rateColors=['#8af','#fa8','#fc6','#3a78d6','#d67a3a','#c89a1a'];
+        if(hasDerotateRates){
+          rateSeries.push(radArrToDeg(j.derotate_roll_rate_rad_s),radArrToDeg(j.derotate_pitch_rate_rad_s),j.derotate_lookup_valid,j.derotate_interp_gap_ms);
+          rateLabels.push('roll_hist','pitch_hist','lookup_valid','gap_ms');
+          rateColors.push('#6cc','#9f9','#fff','#e8a');
+        }
+        drawCanvas('c_rates',t,rateSeries,rateLabels,rateColors,tp,hov('c_rates'));
       }
 
       // (6) Tilt slot: for PNG repurposed as pitch component decomposition (deg/s).

@@ -16,7 +16,7 @@ namespace circle::ipc {
 
 namespace {
 constexpr char kMagic[8] = {'C', 'P', 'S', 'T', 'R', 'K', 'E', '1'};
-constexpr uint32_t kVersion = 4;
+constexpr uint32_t kVersion = 5;
 
 void appendJsonValue(std::ostringstream& oss, float v) {
   if (std::isfinite(v)) {
@@ -296,6 +296,24 @@ std::string StrikeTelemetryReader::seriesJson() const {
               [](const auto& s) { return s.png_tilt_softcap_roll; });
     emitArray("png_tilt_softcap_pitch",
               [](const auto& s) { return s.png_tilt_softcap_pitch; });
+    emitArray("derotate_lookup_age_ms",
+              [](const auto& s) { return s.png_derotate_lookup_age_ms; });
+    emitArray("derotate_interp_gap_ms",
+              [](const auto& s) { return s.png_derotate_interp_gap_ms; });
+    emitArray("derotate_roll_rate_rad_s", [&](const auto& s) {
+      return s.png_derotate_lookup_valid ? s.png_derotate_roll_rate_rad_s : kNan;
+    });
+    emitArray("derotate_pitch_rate_rad_s", [&](const auto& s) {
+      return s.png_derotate_lookup_valid ? s.png_derotate_pitch_rate_rad_s : kNan;
+    });
+    emitArray("camera_exposure_midpoint_offset_ns", [](const auto& s) {
+      return s.png_camera_exposure_midpoint_offset_ns;
+    });
+    emitArray("fc_serial_latency_ns",
+              [](const auto& s) { return s.png_fc_serial_latency_ns; });
+    emitArray("derotate_lookup_valid", [](const auto& s) {
+      return static_cast<int>(s.png_derotate_lookup_valid);
+    });
     emitArray("png_intercept_active", [](const auto& s) {
       return static_cast<int>(s.png_intercept_active);
     });

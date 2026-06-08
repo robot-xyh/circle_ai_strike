@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include "circle/strike_png/entry_handoff.hpp"
@@ -23,6 +24,11 @@ struct StrikePngNodeParams {
   float strike_thrust_z{0.78F};
   bool target_lost_hold_enable{true};
   double target_lost_hold_delay_s{0.05};
+  bool derotate_history_enable{true};
+  int64_t camera_exposure_midpoint_offset_ns{0};
+  int64_t fc_serial_latency_ns{0};
+  float max_derotate_interpolation_gap_s{0.02F};
+  bool body_rate_observer_enable{false};
   EntryHandoffParams entry_handoff{};
   StrikePngParams controller{};
 };

@@ -112,6 +112,7 @@ struct StrikePngInput {
   float fy{0.0F};
   float roll_rate_rad_s{0.0F};
   float pitch_rate_rad_s{0.0F};
+  bool derotate_rate_valid{true};
   bool attitude_valid{false};
   bool ownship_forward_speed_valid{false};
   float ownship_forward_speed_m_s{0.0F};
@@ -163,6 +164,7 @@ struct StrikePngOutput {
   bool visual_prediction_active{false};
   float control_ex{0.0F};
   float control_ey{0.0F};
+  bool derotate_rate_valid{false};
 };
 
 class StrikePngController {

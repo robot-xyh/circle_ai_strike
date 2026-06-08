@@ -247,7 +247,21 @@ std::string makeVisionSeriesJson(const std::string& query,
         << ",\"png_tilt_softcap_roll\":"
         << fmt_vec(&VisionPlotSample::png_tilt_softcap_roll)
         << ",\"png_tilt_softcap_pitch\":"
-        << fmt_vec(&VisionPlotSample::png_tilt_softcap_pitch);
+        << fmt_vec(&VisionPlotSample::png_tilt_softcap_pitch)
+        << ",\"derotate_lookup_age_ms\":"
+        << fmt_vec(&VisionPlotSample::derotate_lookup_age_ms)
+        << ",\"derotate_interp_gap_ms\":"
+        << fmt_vec(&VisionPlotSample::derotate_interp_gap_ms)
+        << ",\"derotate_roll_rate_rad_s\":"
+        << fmt_vec(&VisionPlotSample::derotate_roll_rate_rad_s)
+        << ",\"derotate_pitch_rate_rad_s\":"
+        << fmt_vec(&VisionPlotSample::derotate_pitch_rate_rad_s)
+        << ",\"camera_exposure_midpoint_offset_ns\":"
+        << fmt_vec(&VisionPlotSample::camera_exposure_midpoint_offset_ns)
+        << ",\"fc_serial_latency_ns\":"
+        << fmt_vec(&VisionPlotSample::fc_serial_latency_ns);
+    append_bool_vec("derotate_lookup_valid",
+                    &VisionPlotSample::derotate_lookup_valid);
     append_bool_vec("png_intercept_active",
                     &VisionPlotSample::png_intercept_active);
     append_bool_vec("png_crossing_active",

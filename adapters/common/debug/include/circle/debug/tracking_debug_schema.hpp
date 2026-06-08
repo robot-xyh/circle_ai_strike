@@ -77,6 +77,13 @@ struct VisionPlotSample {
   float png_measurement_age_s{0.F};
   float png_tilt_softcap_roll{1.F};
   float png_tilt_softcap_pitch{1.F};
+  float derotate_lookup_age_ms{0.F};
+  float derotate_interp_gap_ms{0.F};
+  float derotate_roll_rate_rad_s{0.F};
+  float derotate_pitch_rate_rad_s{0.F};
+  float camera_exposure_midpoint_offset_ns{0.F};
+  float fc_serial_latency_ns{0.F};
+  bool derotate_lookup_valid{false};
   bool png_intercept_active{false};
   bool png_crossing_active{false};
   bool png_fwd_guard_active{false};
